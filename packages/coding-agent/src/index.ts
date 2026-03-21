@@ -53,9 +53,11 @@ export type {
 	AgentStartEvent,
 	AgentToolResult,
 	AgentToolUpdateCallback,
-	AppAction,
+	AppKeybinding,
 	BashToolCallEvent,
 	BeforeAgentStartEvent,
+	BeforeProviderRequestEvent,
+	BeforeProviderRequestEventResult,
 	CompactOptions,
 	ContextEvent,
 	ContextUsage,
@@ -110,6 +112,7 @@ export type {
 	SlashCommandSource,
 	TerminalInputHandler,
 	ToolCallEvent,
+	ToolCallEventResult,
 	ToolDefinition,
 	ToolInfo,
 	ToolRenderResultOptions,
@@ -135,8 +138,6 @@ export {
 	isWriteToolResult,
 	wrapRegisteredTool,
 	wrapRegisteredTools,
-	wrapToolsWithExtensions,
-	wrapToolWithExtensions,
 } from "./core/extensions/index.js";
 // Footer data provider (git branch + extension statuses - data not otherwise available to extensions)
 export type { ReadonlyFooterDataProvider } from "./core/footer-data-provider.js";
@@ -223,6 +224,7 @@ export {
 	type BashToolOptions,
 	bashTool,
 	codingTools,
+	createLocalBashOperations,
 	DEFAULT_MAX_BYTES,
 	DEFAULT_MAX_LINES,
 	type EditOperations,
@@ -260,6 +262,7 @@ export {
 	type WriteOperations,
 	type WriteToolInput,
 	type WriteToolOptions,
+	withFileMutationQueue,
 	writeTool,
 } from "./core/tools/index.js";
 // Main entry point
@@ -276,8 +279,6 @@ export {
 export {
 	ArminComponent,
 	AssistantMessageComponent,
-	appKey,
-	appKeyHint,
 	BashExecutionComponent,
 	BorderedLoader,
 	BranchSummaryMessageComponent,
@@ -288,9 +289,9 @@ export {
 	ExtensionEditorComponent,
 	ExtensionInputComponent,
 	ExtensionSelectorComponent,
-	editorKey,
 	FooterComponent,
 	keyHint,
+	keyText,
 	LoginDialogComponent,
 	ModelSelectorComponent,
 	OAuthSelectorComponent,
