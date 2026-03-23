@@ -24,6 +24,14 @@ cp permission-gate.ts ~/.pi/agent/extensions/
 | `dirty-repo-guard.ts` | Prevents session changes with uncommitted git changes |
 | `sandbox/` | OS-level sandboxing using `@anthropic-ai/sandbox-runtime` with per-project config |
 
+### Web & Browser Tools
+
+| Extension | Description |
+|-----------|-------------|
+| `web-fetch.ts` | Fetch any URL and return content as Markdown (default), plain text, or raw HTML. Handles images inline. Based on [opencode](https://github.com/anomalyco/opencode). |
+| `web-search.ts` | Search the web via Exa AI (free public endpoint, no API key needed). Returns ranked results with content summaries. Based on [opencode](https://github.com/anomalyco/opencode). |
+| `playwright-mcp.ts` | Connect to the [Playwright MCP server](https://github.com/microsoft/playwright-mcp) via stdio. Dynamically registers all browser-automation tools (`browser_navigate`, `browser_click`, `browser_snapshot`, etc.). Requires `npx` on PATH. |
+
 ### Custom Tools
 
 | Extension | Description |
