@@ -45,25 +45,58 @@ const TOOL_PARAMS = Type.Object({
 // HTML conversion helpers (no external dependencies)
 // ---------------------------------------------------------------------------
 
+/** Named HTML entities map for single-pass decoding. */
+const NAMED_HTML_ENTITIES: Record<string, string> = {
+	amp: "&",
+	lt: "<",
+	gt: ">",
+	quot: '"',
+	apos: "'",
+	nbsp: "\u00A0",
+	copy: "\u00A9",
+	reg: "\u00AE",
+	trade: "\u2122",
+	mdash: "\u2014",
+	ndash: "\u2013",
+	laquo: "\u00AB",
+	raquo: "\u00BB",
+	hellip: "\u2026",
+};
+
+/**
+ * Decode HTML entities in a single pass to avoid double-decoding.
+ * e.g. &amp;lt; → &lt; (not <), &lt; → <
+ */
 function decodeHtmlEntities(text: string): string {
-	return text
-		.replace(/&amp;/g, "&")
-		.replace(/&lt;/g, "<")
-		.replace(/&gt;/g, ">")
-		.replace(/&quot;/g, '"')
-		.replace(/&#39;/g, "'")
-		.replace(/&apos;/g, "'")
-		.replace(/&nbsp;/g, " ")
-		.replace(/&#(\d+);/g, (_, code: string) => String.fromCharCode(Number(code)))
-		.replace(/&#x([0-9a-f]+);/gi, (_, hex: string) => String.fromCharCode(Number.parseInt(hex, 16)));
+	return text.replace(/&(?:([a-z]+)|#(\d+)|#x([0-9a-f]+));/gi, (_match, name: string, decimal: string, hex: string) => {
+		if (name) {
+			return NAMED_HTML_ENTITIES[name.toLowerCase()] ?? `&${name};`;
+		}
+		if (decimal !== undefined && decimal !== "") {
+			return String.fromCharCode(Number(decimal));
+		}
+		if (hex !== undefined && hex !== "") {
+			return String.fromCharCode(Number.parseInt(hex, 16));
+		}
+		return _match;
+	});
+}
+
+/**
+ * Build a regex that strips a paired HTML tag (e.g. <script...>...</script>).
+ * Allows optional whitespace in the closing tag: </script  >.
+ * Note: this is content-extraction regex for LLM text, not a security sanitiser.
+ */
+function stripTagRegex(tag: string): RegExp {
+	return new RegExp(`<${tag}\\b[^<]*(?:(?!<\\/${tag}\\s*>)<[^<]*)*<\\/${tag}\\s*>`, "gi");
 }
 
 /** Strip HTML and return readable plain text. */
 function htmlToText(html: string): string {
 	return decodeHtmlEntities(
 		html
-			.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "")
-			.replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, "")
+			.replace(stripTagRegex("script"), "")
+			.replace(stripTagRegex("style"), "")
 			.replace(/<br\s*\/?>/gi, "\n")
 			.replace(/<\/p>/gi, "\n\n")
 			.replace(/<\/h[1-6]>/gi, "\n\n")
@@ -82,8 +115,8 @@ function htmlToMarkdown(html: string): string {
 	let md = html
 		.replace(/<!DOCTYPE[^>]*>/gi, "")
 		.replace(/<!--[\s\S]*?-->/g, "")
-		.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "")
-		.replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, "")
+		.replace(stripTagRegex("script"), "")
+		.replace(stripTagRegex("style"), "")
 		.replace(/<meta\b[^>]*\/?>/gi, "")
 		.replace(/<link\b[^>]*\/?>/gi, "");
 
@@ -108,7 +141,7 @@ function htmlToMarkdown(html: string): string {
 
 	// Fenced code blocks (pre > code)
 	md = md.replace(/<pre[^>]*><code[^>]*>([\s\S]*?)<\/code><\/pre>/gi, (_, code: string) => {
-		const decoded = code.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&").replace(/&quot;/g, '"');
+		const decoded = decodeHtmlEntities(code);
 		return `\`\`\`\n${decoded}\n\`\`\`\n\n`;
 	});
 	md = md.replace(/<pre[^>]*>([\s\S]*?)<\/pre>/gi, "```\n$1\n```\n\n");
