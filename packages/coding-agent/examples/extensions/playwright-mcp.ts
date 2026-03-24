@@ -298,9 +298,10 @@ export default function playwrightMcpExtension(pi: ExtensionAPI) {
 	// ------------------------------------------------------------------
 	async function registerPlaywrightTools(ctx: ExtensionContext) {
 		if (registered) return;
-		registered = true;
 
-		// Start client now so we can register the real tools
+		// Start client now so we can register the real tools.
+		// Only set registered=true after a successful start so that a transient
+		// startup failure does not permanently prevent retrying on next call.
 		try {
 			await ensureClient(ctx);
 		} catch (err) {
@@ -310,6 +311,8 @@ export default function playwrightMcpExtension(pi: ExtensionAPI) {
 			);
 			return;
 		}
+
+		registered = true;
 
 		for (const tool of tools) {
 			const toolName = tool.name;
@@ -331,8 +334,9 @@ export default function playwrightMcpExtension(pi: ExtensionAPI) {
 					});
 
 					const abortController = new AbortController();
+					const onParentAbort = () => abortController.abort();
 					if (signal) {
-						signal.addEventListener("abort", () => abortController.abort(), { once: true });
+						signal.addEventListener("abort", onParentAbort, { once: true });
 					}
 
 					// Race the MCP call against the abort signal
@@ -345,7 +349,15 @@ export default function playwrightMcpExtension(pi: ExtensionAPI) {
 						abortController.signal.addEventListener("abort", () => reject(new Error("aborted")), { once: true });
 					});
 
-					const result = await Promise.race([callPromise, abortPromise]);
+					let result: McpToolCallResult;
+					try {
+						result = await Promise.race([callPromise, abortPromise]);
+					} finally {
+						// Remove listener to prevent leaking if signal is long-lived and never aborted
+						if (signal) {
+							signal.removeEventListener("abort", onParentAbort);
+						}
+					}
 
 					if (result.isError) {
 						const errText = result.content.map((block) => block.text ?? "").join("\n");

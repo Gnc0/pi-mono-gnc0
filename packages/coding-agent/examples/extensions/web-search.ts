@@ -111,6 +111,11 @@ export default function webSearchExtension(pi: ExtensionAPI) {
 			const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
 			if (signal) {
 				signal.addEventListener("abort", () => controller.abort(), { once: true });
+				// If the signal is already aborted (e.g. caller aborted before execute was called),
+				// addEventListener will never fire — check immediately.
+				if (signal.aborted) {
+					controller.abort();
+				}
 			}
 
 			const body: ExaMcpRequest = {

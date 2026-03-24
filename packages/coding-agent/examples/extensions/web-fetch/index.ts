@@ -9,7 +9,7 @@
  *   The agent can then call web_fetch to read any URL.
  *
  * Supports:
- *   - HTML → Markdown conversion (default)
+ *   - HTML → Markdown conversion (default, via turndown)
  *   - HTML → plain text extraction
  *   - Raw HTML passthrough
  *   - Image responses (returned inline)
@@ -19,6 +19,8 @@
 import { StringEnum } from "@mariozechner/pi-ai";
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
+import TurndownService from "turndown";
+import { gfm } from "turndown-plugin-gfm";
 
 const MAX_RESPONSE_SIZE = 5 * 1024 * 1024; // 5 MB
 const DEFAULT_TIMEOUT_S = 30;
@@ -42,7 +44,7 @@ const TOOL_PARAMS = Type.Object({
 });
 
 // ---------------------------------------------------------------------------
-// HTML conversion helpers (no external dependencies)
+// HTML conversion helpers
 // ---------------------------------------------------------------------------
 
 /** Named HTML entities map for single-pass decoding. */
@@ -110,76 +112,16 @@ function htmlToText(html: string): string {
 		.trim();
 }
 
-/** Convert HTML to Markdown with best-effort structural mapping. */
+/** Convert HTML to Markdown using TurndownService. */
 function htmlToMarkdown(html: string): string {
-	let md = html
-		.replace(/<!DOCTYPE[^>]*>/gi, "")
-		.replace(/<!--[\s\S]*?-->/g, "")
-		.replace(stripTagRegex("script"), "")
-		.replace(stripTagRegex("style"), "")
-		.replace(/<meta\b[^>]*\/?>/gi, "")
-		.replace(/<link\b[^>]*\/?>/gi, "");
-
-	// Headings (process largest first to avoid partial matches)
-	for (let level = 6; level >= 1; level--) {
-		md = md.replace(new RegExp(`<h${level}[^>]*>([\\s\\S]*?)<\\/h${level}>`, "gi"), `${"#".repeat(level)} $1\n\n`);
-	}
-
-	// Links — href before text
-	md = md.replace(/<a\s[^>]*href=["']([^"']*?)["'][^>]*>([\s\S]*?)<\/a>/gi, "[$2]($1)");
-
-	// Images — try alt+src and src+alt order, then src-only
-	md = md.replace(
-		/<img\s[^>]*alt=["']([^"']*?)["'][^>]*src=["']([^"']*?)["'][^>]*\/?>/gi,
-		"![$1]($2)",
-	);
-	md = md.replace(
-		/<img\s[^>]*src=["']([^"']*?)["'][^>]*alt=["']([^"']*?)["'][^>]*\/?>/gi,
-		"![$2]($1)",
-	);
-	md = md.replace(/<img\s[^>]*src=["']([^"']*?)["'][^>]*\/?>/gi, "![]($1)");
-
-	// Fenced code blocks (pre > code)
-	md = md.replace(/<pre[^>]*><code[^>]*>([\s\S]*?)<\/code><\/pre>/gi, (_, code: string) => {
-		const decoded = decodeHtmlEntities(code);
-		return `\`\`\`\n${decoded}\n\`\`\`\n\n`;
+	const td = new TurndownService({
+		headingStyle: "atx",
+		codeBlockStyle: "fenced",
+		bulletListMarker: "-",
 	});
-	md = md.replace(/<pre[^>]*>([\s\S]*?)<\/pre>/gi, "```\n$1\n```\n\n");
-
-	// Inline code
-	md = md.replace(/<code[^>]*>([\s\S]*?)<\/code>/gi, "`$1`");
-
-	// Bold / italic
-	md = md.replace(/<(?:strong|b)[^>]*>([\s\S]*?)<\/(?:strong|b)>/gi, "**$1**");
-	md = md.replace(/<(?:em|i)[^>]*>([\s\S]*?)<\/(?:em|i)>/gi, "*$1*");
-	md = md.replace(/<(?:s|strike|del)[^>]*>([\s\S]*?)<\/(?:s|strike|del)>/gi, "~~$1~~");
-
-	// Blockquotes
-	md = md.replace(/<blockquote[^>]*>([\s\S]*?)<\/blockquote>/gi, (_, content: string) => {
-		const inner = content.replace(/<[^>]+>/g, "").trim();
-		return `> ${inner}\n\n`;
-	});
-
-	// List items (unordered)
-	md = md.replace(/<li[^>]*>([\s\S]*?)<\/li>/gi, "- $1\n");
-	md = md.replace(/<[ou]l[^>]*>/gi, "\n").replace(/<\/[ou]l>/gi, "\n");
-
-	// Paragraphs and line breaks
-	md = md.replace(/<p[^>]*>([\s\S]*?)<\/p>/gi, "$1\n\n");
-	md = md.replace(/<br\s*\/?>/gi, "\n");
-
-	// Horizontal rules
-	md = md.replace(/<hr\s*\/?>/gi, "\n---\n\n");
-
-	// Table cells / rows (basic)
-	md = md.replace(/<t[hd][^>]*>([\s\S]*?)<\/t[hd]>/gi, "| $1 ");
-	md = md.replace(/<\/tr>/gi, "|\n");
-
-	// Strip remaining tags then decode entities
-	md = md.replace(/<[^>]+>/g, "");
-	md = decodeHtmlEntities(md);
-
-	return md.replace(/\n{3,}/g, "\n\n").trim();
+	td.use(gfm);
+	td.remove(["script", "style", "meta", "link", "nav", "header", "footer"]);
+	return td.turndown(html);
 }
 
 // ---------------------------------------------------------------------------
