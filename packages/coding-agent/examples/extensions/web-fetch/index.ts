@@ -70,18 +70,21 @@ const NAMED_HTML_ENTITIES: Record<string, string> = {
  * e.g. &amp;lt; → &lt; (not <), &lt; → <
  */
 function decodeHtmlEntities(text: string): string {
-	return text.replace(/&(?:([a-z]+)|#(\d+)|#x([0-9a-f]+));/gi, (_match, name: string, decimal: string, hex: string) => {
-		if (name) {
-			return NAMED_HTML_ENTITIES[name.toLowerCase()] ?? `&${name};`;
-		}
-		if (decimal !== undefined && decimal !== "") {
-			return String.fromCharCode(Number(decimal));
-		}
-		if (hex !== undefined && hex !== "") {
-			return String.fromCharCode(Number.parseInt(hex, 16));
-		}
-		return _match;
-	});
+	return text.replace(
+		/&(?:([a-z]+)|#(\d+)|#x([0-9a-f]+));/gi,
+		(_match, name: string, decimal: string, hex: string) => {
+			if (name) {
+				return NAMED_HTML_ENTITIES[name.toLowerCase()] ?? `&${name};`;
+			}
+			if (decimal !== undefined && decimal !== "") {
+				return String.fromCharCode(Number(decimal));
+			}
+			if (hex !== undefined && hex !== "") {
+				return String.fromCharCode(Number.parseInt(hex, 16));
+			}
+			return _match;
+		},
+	);
 }
 
 /**

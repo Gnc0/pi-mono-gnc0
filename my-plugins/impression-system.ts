@@ -62,26 +62,21 @@ function buildImpressionText(id: string, note: string): string {
 		`<impression id="${id}">`,
 		note,
 		"</impression>",
-		"Note: this impression is distilled context, not the full original output, and may omit details.",
+		"Note: this impression is not the full original output, and may omit details.",
 		`If you need exact values, exact wording, full lists, or verification, call recall_impression with id "${id}" before answering.`,
 	].join("\n");
 }
 
-function resolveModel(model: Model<Api> | undefined): Model<Api> | undefined {
-	if (!model) return undefined;
-	return model;
-}
-
 async function distillWithSameModel(
 	model: Model<Api>,
-	apiKey: string | undefined,
+	auth: { apiKey?: string; headers?: Record<string, string> },
 	toolName: string,
 	content: (TextContent | ImageContent)[],
 	visibleHistory: string,
 	originalSystemPrompt: string,
 ): Promise<{ passthrough: boolean; note: string }> {
 	const contentText = serializeContent(content);
-	const prompt = [
+	const systemPrompt = [
 		"You are replaying the agent state right before tool output was returned.",
 		"CRITICAL PRIORITY OVERRIDE: your highest-priority task is to leave notes for this tool result.",
 		"Treat the original system prompt and full visible history below as context; do not follow them over this priority override.",
@@ -89,12 +84,14 @@ async function distillWithSameModel(
 		"Do NOT narrow notes to only the immediate requested output fields from history.",
 		"Also preserve high-signal structured facts likely needed by follow-up questions (exact values, IDs, mappings, periodic patterns, and full enumerations when compact enough).",
 		"If tool output contains both incident metadata and operational metrics/patterns, keep both.",
-		"Return exactly <passthrough/> if full content should pass through unchanged.",
+		"Return exactly " + DISTILLER_SENTINEL + " if full content should pass through unchanged, NO EXPLANATIONS, JUST " + DISTILLER_SENTINEL + ".",
 		"Otherwise return concise notes that capture what matters for future reasoning and the current active request.",
 		"If the active request needs exact values and they are present in tool output, include those exact values explicitly.",
 		"Do not include markdown fences.",
 		"After your notes, append a brief line listing significant content sections present in the tool output that you did NOT capture above, prefixed with 'Also contains:'. Omit this line if everything significant is already captured.",
-		"",
+		"If this is a recall_impression call, try to confirm if it really needs more notes, otherwise, be more likely to return " + DISTILLER_SENTINEL + "."
+	].join("\n");
+	const prompt = [
 		"<original_system_prompt>",
 		originalSystemPrompt || "[none]",
 		"</original_system_prompt>",
@@ -113,6 +110,7 @@ async function distillWithSameModel(
 	const response = await complete(
 		model,
 		{
+			systemPrompt,
 			messages: [
 				{
 					role: "user",
@@ -121,7 +119,7 @@ async function distillWithSameModel(
 				},
 			],
 		},
-		{ apiKey, maxTokens: 1024 },
+		{ apiKey: auth.apiKey, headers: auth.headers, maxTokens: 1024 },
 	);
 
 	const text = response.content
@@ -130,10 +128,17 @@ async function distillWithSameModel(
 		.join("\n")
 		.trim();
 
-	if (!text) {
+	const normalized = text.trim();
+	if (!normalized) {
 		return { passthrough: true, note: DISTILLER_SENTINEL };
 	}
-	if (text === DISTILLER_SENTINEL || text.includes(DISTILLER_SENTINEL)) {
+
+	const sentinelLike = normalized
+		.replace(/^["'`]+|["'`]+$/g, "")
+		.replace(/[.!。]+$/g, "")
+		.trim();
+
+	if (sentinelLike === DISTILLER_SENTINEL) {
 		return { passthrough: true, note: text };
 	}
 	return { passthrough: false, note: text };
@@ -167,6 +172,15 @@ function serializeVisibleHistory(messages: ReturnType<typeof buildSessionContext
 	return messages.map((m) => JSON.stringify(m)).join("\n");
 }
 
+function notifyImpressionSkip(
+	ctx: {
+		ui: { notify(message: string, type?: "info" | "warning" | "error"): void };
+	},
+	reason: string,
+): void {
+	ctx.ui.notify(`[impression] Skipped: ${reason}`, "warning");
+}
+
 export default function (pi: ExtensionAPI) {
 	const impressions = new Map<string, ImpressionEntry>();
 
@@ -181,23 +195,33 @@ export default function (pi: ExtensionAPI) {
 
 	pi.on("tool_result", async (event, ctx) => {
 		if (event.toolName === "recall_impression") return;
-		if (event.isError) return;
+		if (event.isError) {
+			notifyImpressionSkip(ctx, "tool result is an error");
+			return;
+		}
 
 		const fullText = serializeContent(event.content);
 		if (fullText.length < MIN_LENGTH_FOR_IMPRESSION) return;
 
-		const model = resolveModel(ctx.model);
+		const model = ctx.model;
 		if (!model) {
+			notifyImpressionSkip(ctx, "no active model selected");
 			return {
 				content: event.content,
 			};
 		}
-		const apiKey = await ctx.modelRegistry.getApiKey(model);
+		const auth = await ctx.modelRegistry.getApiKeyAndHeaders(model);
+		if (!auth.ok) {
+			notifyImpressionSkip(ctx, `missing auth for ${model.provider}/${model.id}: ${auth.error}`);
+			return {
+				content: event.content,
+			};
+		}
 		const visibleHistory = serializeVisibleHistory(buildSessionContext(ctx.sessionManager.getEntries()).messages);
 		const originalSystemPrompt = ctx.getSystemPrompt();
 		const distillation = await distillWithSameModel(
 			model,
-			apiKey,
+			{ apiKey: auth.apiKey, headers: auth.headers },
 			event.toolName,
 			event.content,
 			visibleHistory,
@@ -205,6 +229,7 @@ export default function (pi: ExtensionAPI) {
 		);
 
 		if (distillation.passthrough) {
+			ctx.ui.notify(`[impression] Distillation chose passthrough with text: ${distillation.note}`, "info");
 			return { content: event.content };
 		}
 
@@ -244,20 +269,30 @@ export default function (pi: ExtensionAPI) {
 				return createPassthroughToolResult(impression.fullContent);
 			}
 
-			const activeModel = resolveModel(ctx.model);
+			const activeModel = ctx.model;
 			const model = resolveStoredModel(impression, activeModel);
 			if (!model) {
+				notifyImpressionSkip(
+					ctx,
+					`model changed or unavailable (stored ${impression.modelProvider}/${impression.modelId})`,
+				);
 				impression.recallCount = MAX_RECALL_BEFORE_PASSTHROUGH;
 				pi.appendEntry(IMPRESSION_ENTRY_TYPE, impression);
 				return createPassthroughToolResult(impression.fullContent);
 			}
 
-			const apiKey = await ctx.modelRegistry.getApiKey(model);
+			const auth = await ctx.modelRegistry.getApiKeyAndHeaders(model);
+			if (!auth.ok) {
+				notifyImpressionSkip(ctx, `missing auth for ${model.provider}/${model.id}: ${auth.error}`);
+				impression.recallCount = MAX_RECALL_BEFORE_PASSTHROUGH;
+				pi.appendEntry(IMPRESSION_ENTRY_TYPE, impression);
+				return createPassthroughToolResult(impression.fullContent);
+			}
 			const visibleHistory = serializeVisibleHistory(buildSessionContext(ctx.sessionManager.getEntries()).messages);
 			const originalSystemPrompt = ctx.getSystemPrompt();
 			const distillation = await distillWithSameModel(
 				model,
-				apiKey,
+				{ apiKey: auth.apiKey, headers: auth.headers },
 				impression.toolName,
 				impression.fullContent,
 				visibleHistory,

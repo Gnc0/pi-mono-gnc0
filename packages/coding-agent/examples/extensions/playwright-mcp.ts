@@ -25,9 +25,9 @@
  *   PLAYWRIGHT_MCP_DEBUG=1  — Log Playwright MCP stderr output for debugging
  */
 
-import { spawn, type ChildProcess } from "node:child_process";
+import { type ChildProcess, spawn } from "node:child_process";
 import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
-import { Type, type TSchema } from "@sinclair/typebox";
+import { type TSchema, Type } from "@sinclair/typebox";
 
 // ---------------------------------------------------------------------------
 // MCP Protocol types (JSON-RPC 2.0 over stdio)
@@ -305,10 +305,7 @@ export default function playwrightMcpExtension(pi: ExtensionAPI) {
 		try {
 			await ensureClient(ctx);
 		} catch (err) {
-			ctx.ui.notify(
-				`Playwright MCP failed to start: ${err instanceof Error ? err.message : String(err)}`,
-				"error",
-			);
+			ctx.ui.notify(`Playwright MCP failed to start: ${err instanceof Error ? err.message : String(err)}`, "error");
 			return;
 		}
 
@@ -365,8 +362,9 @@ export default function playwrightMcpExtension(pi: ExtensionAPI) {
 					}
 
 					// Convert MCP content blocks to pi content blocks
-					const content: Array<{ type: "text"; text: string } | { type: "image"; data: string; mimeType: string }> =
-						[];
+					const content: Array<
+						{ type: "text"; text: string } | { type: "image"; data: string; mimeType: string }
+					> = [];
 
 					for (const block of result.content) {
 						if (block.type === "text" && block.text) {

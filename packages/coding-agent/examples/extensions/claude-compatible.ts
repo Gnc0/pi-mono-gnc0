@@ -66,7 +66,7 @@ function discoverClaudeFiles(cwd: string): ClaudeFile[] {
 	while (true) {
 		const parent = path.dirname(cur);
 		if (parent === cur) break; // reached filesystem root
-		if (cur === home) break;   // stop at home (global already included)
+		if (cur === home) break; // stop at home (global already included)
 		ancestors.unshift(cur);
 		cur = parent;
 	}
@@ -106,10 +106,7 @@ export default function claudeCompatibleExtension(pi: ExtensionAPI) {
 		if (claudeFiles.length === 0) return;
 
 		const sections = claudeFiles
-			.map(
-				(f) =>
-					`<claude_md source="${f.label}" path="${f.absolutePath}">\n${f.content}\n</claude_md>`,
-			)
+			.map((f) => `<claude_md source="${f.label}" path="${f.absolutePath}">\n${f.content}\n</claude_md>`)
 			.join("\n\n");
 
 		return {

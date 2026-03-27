@@ -1,5 +1,5 @@
 ---
-name: Pre-Publish Review
+name: pre-publish-review
 description: Three-layer review with multiple specialized agents before publishing
 ---
 

@@ -163,13 +163,16 @@ interface SearchResult {
 	status?: number;
 }
 
-async function callExa(args: {
-	query: string;
-	numResults?: number;
-	type?: "auto" | "fast" | "deep";
-	livecrawl?: "fallback" | "preferred";
-	contextMaxCharacters?: number;
-}, signal?: AbortSignal): Promise<SearchResult> {
+async function callExa(
+	args: {
+		query: string;
+		numResults?: number;
+		type?: "auto" | "fast" | "deep";
+		livecrawl?: "fallback" | "preferred";
+		contextMaxCharacters?: number;
+	},
+	signal?: AbortSignal,
+): Promise<SearchResult> {
 	const body = {
 		jsonrpc: "2.0",
 		id: 1,
@@ -348,10 +351,16 @@ console.log("\n  3.9 contextMaxCharacters: ignored by public Exa endpoint — mu
 	});
 	const smallOk = rSmall.ok && rSmall.text !== undefined;
 	const largeOk = rLarge.ok && rLarge.text !== undefined;
-	assert(smallOk, "contextMaxCharacters=100: no crash, returns results",
-		smallOk ? undefined : rSmall.error ?? "empty");
-	assert(largeOk, "contextMaxCharacters=100000: no crash, returns results",
-		largeOk ? undefined : rLarge.error ?? "empty");
+	assert(
+		smallOk,
+		"contextMaxCharacters=100: no crash, returns results",
+		smallOk ? undefined : (rSmall.error ?? "empty"),
+	);
+	assert(
+		largeOk,
+		"contextMaxCharacters=100000: no crash, returns results",
+		largeOk ? undefined : (rLarge.error ?? "empty"),
+	);
 }
 
 // 3.10 contextMaxCharacters=100000 (no crash)

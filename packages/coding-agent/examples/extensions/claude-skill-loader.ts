@@ -31,13 +31,7 @@
  *     e.g. CLAUDE_SKILL_LOADER_EXCLUDE=ralph-loop-help,ralph-loop-ralph-loop
  */
 
-import {
-	existsSync,
-	mkdirSync,
-	readFileSync,
-	readdirSync,
-	writeFileSync,
-} from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, extname, join } from "node:path";
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
@@ -88,11 +82,7 @@ function prefixedName(plugin: string, skillName: string): string {
  * Write an adapted SKILL.md file to the cache directory.
  * Returns the path to the written file, or null on failure.
  */
-function writeAdaptedSkill(
-	name: string,
-	description: string,
-	body: string,
-): string | null {
+function writeAdaptedSkill(name: string, description: string, body: string): string | null {
 	const cacheSkillDir = join(CACHE_DIR, name);
 	const cacheSkillPath = join(cacheSkillDir, "SKILL.md");
 	// Always quote description to handle special YAML characters
@@ -194,11 +184,7 @@ function findSkillMdFiles(dir: string): string[] {
  * Load SKILL.md files from a plugin directory, prefixed with the plugin name.
  * Writes adapted cache files so the prefixed name is registered in pi.
  */
-function loadPluginSkillMd(
-	installPath: string,
-	pluginKey: string,
-	exclude: Set<string>,
-): LoadedSkill[] {
+function loadPluginSkillMd(installPath: string, pluginKey: string, exclude: Set<string>): LoadedSkill[] {
 	const skillFiles = findSkillMdFiles(installPath);
 	const results: LoadedSkill[] = [];
 	const plugin = pluginShortName(pluginKey);
@@ -233,11 +219,7 @@ function loadPluginSkillMd(
  * Adapt Claude command .md files from a `commands/` directory, prefixed with plugin name.
  * Skips entries marked `hide-from-slash-command-tool: "true"`.
  */
-function adaptCommandSkills(
-	commandsDir: string,
-	pluginKey: string,
-	exclude: Set<string>,
-): LoadedSkill[] {
+function adaptCommandSkills(commandsDir: string, pluginKey: string, exclude: Set<string>): LoadedSkill[] {
 	if (!existsSync(commandsDir)) return [];
 	const results: LoadedSkill[] = [];
 	const plugin = pluginShortName(pluginKey);
@@ -355,7 +337,9 @@ export default function claudeSkillLoader(pi: ExtensionAPI) {
 			let manifest: PluginsManifest | undefined;
 			try {
 				manifest = JSON.parse(readFileSync(PLUGINS_JSON, "utf-8")) as PluginsManifest;
-			} catch { /* ignore */ }
+			} catch {
+				/* ignore */
+			}
 
 			if (manifest) {
 				for (const [pluginKey, installations] of Object.entries(manifest.plugins)) {
@@ -363,12 +347,18 @@ export default function claudeSkillLoader(pi: ExtensionAPI) {
 						const { installPath } = install;
 
 						for (const skill of loadPluginSkillMd(installPath, pluginKey, exclude)) {
-							if (!seenNames.has(skill.name)) { seenNames.add(skill.name); skills.push(skill); }
+							if (!seenNames.has(skill.name)) {
+								seenNames.add(skill.name);
+								skills.push(skill);
+							}
 						}
 
 						const commandsDir = join(installPath, "commands");
 						for (const skill of adaptCommandSkills(commandsDir, pluginKey, exclude)) {
-							if (!seenNames.has(skill.name)) { seenNames.add(skill.name); skills.push(skill); }
+							if (!seenNames.has(skill.name)) {
+								seenNames.add(skill.name);
+								skills.push(skill);
+							}
 						}
 					}
 				}
@@ -377,7 +367,10 @@ export default function claudeSkillLoader(pi: ExtensionAPI) {
 
 		// ── Source 2: user's global commands (~/.claude/commands/) ───────────
 		for (const skill of loadUserCommands(exclude)) {
-			if (!seenNames.has(skill.name)) { seenNames.add(skill.name); skills.push(skill); }
+			if (!seenNames.has(skill.name)) {
+				seenNames.add(skill.name);
+				skills.push(skill);
+			}
 		}
 
 		loadedSkills = skills;
@@ -398,10 +391,7 @@ export default function claudeSkillLoader(pi: ExtensionAPI) {
 				return `/skill:${s.name}${tag} — ${s.description.slice(0, 55)}`;
 			});
 
-			await ctx.ui.select(
-				`Claude Skills (${loadedSkills.length} loaded)`,
-				items,
-			);
+			await ctx.ui.select(`Claude Skills (${loadedSkills.length} loaded)`, items);
 		},
 	});
 }

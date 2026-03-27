@@ -19,18 +19,18 @@
  *   → LLM calls spawn_subagent({ task: "...", tools: "coding" })
  */
 
+import type { AssistantMessage } from "@mariozechner/pi-ai";
 import {
 	type AgentSessionEvent,
-	type ExtensionAPI,
-	SessionManager,
 	codingTools,
 	createAgentSession,
+	type ExtensionAPI,
 	findTool,
 	grepTool,
 	lsTool,
 	readOnlyTools,
+	SessionManager,
 } from "@mariozechner/pi-coding-agent";
-import type { AssistantMessage } from "@mariozechner/pi-ai";
 import { Type } from "@sinclair/typebox";
 
 const TOOLS_DESCRIPTION =
@@ -41,10 +41,9 @@ const PARAMS = Type.Object({
 		description: "The task for the sub-agent to complete. Be specific and self-contained.",
 	}),
 	tools: Type.Optional(
-		Type.Union(
-			[Type.Literal("read-only"), Type.Literal("coding"), Type.Literal("all")],
-			{ description: TOOLS_DESCRIPTION },
-		),
+		Type.Union([Type.Literal("read-only"), Type.Literal("coding"), Type.Literal("all")], {
+			description: TOOLS_DESCRIPTION,
+		}),
 	),
 	systemPrompt: Type.Optional(
 		Type.String({
@@ -70,8 +69,7 @@ export default function subAgentCalling(pi: ExtensionAPI) {
 			"Spawn an isolated sub-agent with its own fresh context to complete a delegated task. " +
 			"The sub-agent runs to completion and returns its final response. " +
 			"Useful for parallel exploration, sandboxed refactoring, or offloading focused sub-tasks.",
-		promptSnippet:
-			'spawn_subagent(task: str, tools?: "read-only"|"coding"|"all", systemPrompt?: str) → str',
+		promptSnippet: 'spawn_subagent(task: str, tools?: "read-only"|"coding"|"all", systemPrompt?: str) → str',
 		promptGuidelines: [
 			"Use spawn_subagent to delegate focused sub-tasks that benefit from a clean, isolated context.",
 			'Default tools are read-only (read, grep, find, ls). Pass tools="coding" to allow bash/edit/write.',
@@ -148,9 +146,7 @@ export default function subAgentCalling(pi: ExtensionAPI) {
 				await session.agent.waitForIdle();
 
 				// Collect all assistant messages
-				finalMessages = session.agent.state.messages.filter(
-					(m): m is AssistantMessage => m.role === "assistant",
-				);
+				finalMessages = session.agent.state.messages.filter((m): m is AssistantMessage => m.role === "assistant");
 			} finally {
 				signal?.removeEventListener("abort", handleAbort);
 				unsubscribe();

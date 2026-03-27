@@ -1,5 +1,5 @@
 ---
-name: GitHub Triage
+name: github-triage
 description: Read-only analysis of GitHub Issues and PRs
 ---
 
