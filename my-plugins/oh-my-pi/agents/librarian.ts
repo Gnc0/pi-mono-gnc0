@@ -4,7 +4,7 @@ export const librarian: AgentDef = {
   name: "librarian",
   displayName: "Librarian",
   description: "External documentation and open-source codebase search specialist with three-stage discovery.",
-  model: "claude-haiku-4-5-20251001",
+  model: "gpt-5.4-nano",
   temperature: 0.1,
   toolPreset: "all",
   mode: "subagent",

@@ -170,7 +170,7 @@ Approach:
 </Category_Context>
 
 <Caller_Warning>
-THIS CATEGORY USES A SMALLER/FASTER MODEL (claude-haiku-4-5-20251001).
+THIS CATEGORY USES A SMALLER/FASTER MODEL (gpt-5.4-nano).
 
 The model executing this task is optimized for speed over depth. Your prompt MUST be:
 
@@ -311,7 +311,7 @@ export const DEFAULT_CATEGORIES: Record<string, CategoryConfig> = {
 		model: "claude-sonnet-4-6",
 		agent: "sisyphus-junior",
 		description: "Frontend/UI",
-		fallbackModels: ["claude-haiku-4-5-20251001"],
+		fallbackModels: ["gpt-5.4-nano"],
 		promptAppend: VISUAL_CATEGORY_PROMPT_APPEND,
 	},
 	ultrabrain: {
@@ -325,18 +325,18 @@ export const DEFAULT_CATEGORIES: Record<string, CategoryConfig> = {
 		model: "claude-sonnet-4-6",
 		agent: "hephaestus",
 		description: "Autonomous deep work",
-		fallbackModels: ["claude-haiku-4-5-20251001"],
+		fallbackModels: ["gpt-5.4-nano"],
 		promptAppend: DEEP_CATEGORY_PROMPT_APPEND,
 	},
 	artistry: {
 		model: "claude-sonnet-4-6",
 		agent: "sisyphus-junior",
 		description: "Creative design",
-		fallbackModels: ["claude-haiku-4-5-20251001"],
+		fallbackModels: ["gpt-5.4-nano"],
 		promptAppend: ARTISTRY_CATEGORY_PROMPT_APPEND,
 	},
 	quick: {
-		model: "claude-haiku-4-5-20251001",
+		model: "gpt-5.4-nano",
 		agent: "sisyphus-junior",
 		description: "Trivial tasks",
 		fallbackModels: ["claude-sonnet-4-6"],
@@ -346,7 +346,7 @@ export const DEFAULT_CATEGORIES: Record<string, CategoryConfig> = {
 		model: "claude-sonnet-4-6",
 		agent: "sisyphus-junior",
 		description: "Medium effort",
-		fallbackModels: ["claude-haiku-4-5-20251001"],
+		fallbackModels: ["gpt-5.4-nano"],
 		promptAppend: UNSPECIFIED_LOW_CATEGORY_PROMPT_APPEND,
 	},
 	"unspecified-high": {
@@ -360,7 +360,7 @@ export const DEFAULT_CATEGORIES: Record<string, CategoryConfig> = {
 		model: "claude-sonnet-4-6",
 		agent: "sisyphus-junior",
 		description: "Documentation",
-		fallbackModels: ["claude-haiku-4-5-20251001"],
+		fallbackModels: ["gpt-5.4-nano"],
 		promptAppend: WRITING_CATEGORY_PROMPT_APPEND,
 	},
 };
