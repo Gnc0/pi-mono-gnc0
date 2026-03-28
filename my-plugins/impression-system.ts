@@ -142,11 +142,17 @@ function serializeContent(content: (TextContent | ImageContent)[]): string {
 
 function buildImpressionText(id: string, note: string): string {
 	return [
-		`<impression id="${id}">`,
-		note,
-		"</impression>",
-		"Note: this impression is not the full original output, and may omit details.",
-		`If you need exact values, exact wording, full lists, or verification, call recall_impression with id "${id}" before answering.`,
+		`🧠 [MY INTERNAL MEMORY | ID: ${id}]`,                                                                                                                                                                                                      
+         "I have already processed the raw output of this tool in the background for further processing.",
+         "I trust these notes completely (EXCEPT WHEN REPORTING ERRORS). They are sufficient for all reasoning, planning, and answering for the CURRENT needs.",
+         "",
+         "--- MY NOTES ---",
+         note,
+         "----------------",
+         "",
+         "🛑 CRITICAL INSTRUCTION FOR MYSELF:",
+         "- I MUST NOT call `recall_impression` just to 'verify' or 'get more context'.",
+         "- However, I should NOT hesitate to use `recall_impression` when precise, verbatim information is required for the next action (e.g., `edit`, `write`), or new information is needed and additional information should be extracted in the FUTURE."
 	].join("\n");
 }
 
