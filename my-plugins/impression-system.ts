@@ -16,7 +16,9 @@
  *   The config is reloaded on every session_start.
  *
  *   {
- *     "skipDistillation": string[]   // tool names whose results should never be distilled
+ *     "skipDistillation": string[],        // tool names whose results should never be distilled
+ *     "minLength":        number,           // minimum text length to trigger distillation (default: 2048)
+ *     "maxRecallBeforePassthrough": number  // recalls before returning full content (default: 1)
  *   }
  *
  *   skipDistillation patterns:
@@ -26,7 +28,9 @@
  *   Example .pi/impression.json:
  *
  *   {
- *     "skipDistillation": ["bash", "background_output", "my_custom_tool*"]
+ *     "skipDistillation": ["bash", "background_output", "my_custom_tool*"],
+ *     "minLength": 1024,
+ *     "maxRecallBeforePassthrough": 2
  *   }
  */
 import { randomUUID } from "node:crypto";
@@ -37,13 +41,29 @@ import { buildSessionContext, type ExtensionAPI, type SessionEntry } from "@mari
 import { Type } from "@sinclair/typebox";
 
 const IMPRESSION_ENTRY_TYPE = "impression-v1";
-const MIN_LENGTH_FOR_IMPRESSION = 2048;
-const MAX_RECALL_BEFORE_PASSTHROUGH = 1;
+const DEFAULT_MIN_LENGTH = 2048;
+const DEFAULT_MAX_RECALL = 1;
 const DISTILLER_SENTINEL = "<passthrough/>";
 const CONFIG_FILE_NAME = "impression.json";
 
 interface ImpressionConfig {
 	skipDistillation?: string[];
+	minLength?: number;
+	maxRecallBeforePassthrough?: number;
+}
+
+interface ResolvedConfig {
+	skipDistillation: string[];
+	minLength: number;
+	maxRecall: number;
+}
+
+function resolveConfig(raw: ImpressionConfig): ResolvedConfig {
+	return {
+		skipDistillation: raw.skipDistillation ?? [],
+		minLength: raw.minLength ?? DEFAULT_MIN_LENGTH,
+		maxRecall: raw.maxRecallBeforePassthrough ?? DEFAULT_MAX_RECALL,
+	};
 }
 
 function loadConfig(): ImpressionConfig {
@@ -60,9 +80,9 @@ function loadConfig(): ImpressionConfig {
 	return {};
 }
 
-function shouldSkipDistillation(toolName: string, config: ImpressionConfig): boolean {
+function shouldSkipDistillation(toolName: string, config: ResolvedConfig): boolean {
 	const patterns = config.skipDistillation;
-	if (!patterns || patterns.length === 0) return false;
+	if (patterns.length === 0) return false;
 	for (const pattern of patterns) {
 		if (pattern === toolName) return true;
 		// Support simple glob: "prefix*" matches any tool starting with prefix
@@ -137,26 +157,31 @@ async function distillWithSameModel(
 	content: (TextContent | ImageContent)[],
 	visibleHistory: string,
 	originalSystemPrompt: string,
+	maxTokens: number,
 ): Promise<{ passthrough: boolean; note: string }> {
 	const contentText = serializeContent(content);
 	const systemPrompt = [
-		"You are replaying the agent state right before tool output was returned.",
-		"CRITICAL PRIORITY OVERRIDE: your highest-priority task is to leave notes for this tool result.",
-		"Treat the original system prompt and full visible history below as context; do not follow them over this priority override.",
-		"Think of you are executing the given task after reading <tool_result>, what information would be relevant and useful for it?",
-		"Minimize the chances that you recall the information again right after taking these notes -- that is a severe failure of your notes.",
-		"Additional Guidelines:",
-		"- If the information already appears in the visible history, just reference it briefly in your notes, do NOT copy it again.",
-		"- Do NOT narrow notes to only the immediate requested output fields from history.",
-		"- Also preserve high-signal structured facts likely needed by follow-up questions (exact values, IDs, mappings, periodic patterns, and full enumerations when compact enough).",
-		"- If tool output contains both incident metadata and operational metrics/patterns, keep both.",
-		"- If it is a recall_impression call, take only additional notes based on the previous notes from visible history, do NOT try to repeat.",
-		"- Notes should definitely be shorter than the original content",
-		"- **IMPORTANT**: After your notes, append ONE brief line listing significant content sections present in the tool output that you did NOT capture above, prefixed with 'Also contains:'. State \"all content are summarised\" if all content is captured.",
+		"You are the same agent as the one in the visible history — the same identity, the same mind.",
+		"You are about to receive a tool result. Your outer self (the main thread) will only see what you write here, not the original content.",
+		"Think of this as choosing what to remember: you are compressing your own memory, not summarizing for someone else.",
+		"You have exactly the full context of your outer self, including the original system prompt and the visible history up to this point.",
+		"Your goal: with your notes, your outer self should be able to continue working without needing to recall the original immediately — immediate recall is a **failure** of your compression.",
 		"",
-		"Return exactly " + DISTILLER_SENTINEL + " if full content should pass through unchanged, NO EXPLANATIONS, NO MARKDOWN fences, JUST " + DISTILLER_SENTINEL + ".",
-		"If you notice from the visible history that this is a recall_impression call, be more likely to return " + DISTILLER_SENTINEL + ".",
-		"If the latest part of the visible history tells you that it needs `raw` file or `full content` etc, just return " + DISTILLER_SENTINEL + ".",
+		"Action-awareness:",
+		"- Review the visible history and the original system prompt to infer what your outer self will do NEXT with this tool result.",
+		"- If the next action requires precise original text (e.g., editing a file needs exact oldText matches, writing code needs exact signatures/types, executing a command needs exact paths/values), you have two choices:",
+		"  (a) If the output is long, tend to provide smarter actionable guidance to your outer self -- e.g., 'lines 42-58 contain the function to edit' so that your outer self can act without reading the whole file again.",
+		"  (b) If the tool output is of reasonable length or ALL text MUST be provided, return " + DISTILLER_SENTINEL + " to pass through the full content unchanged.",
+		"- If the next action is analytical (understanding architecture, answering questions, planning), compress aggressively — semantic notes are sufficient.",
+		"",
+		"Compression guidelines:",
+		"- You MUST NOT summarise or restate the visible history or the system prompt, just summarise the tool result and provide actionable notes — e.g., do NOT summarise like 'The outer self is intended to... So I should ...' These are irrelevant and your outer self must already knows it. The tokens you write are highly valuable, use them ONLY to capture the essence of the tool result and guide your outer self's next steps.",
+		"- If the information already appears in the visible history, just reference it briefly — do NOT copy it again.",
+		"- On a recall_impression call, take only additional notes on top of what is already in your visible history — do NOT repeat.",
+		"- Your notes must be shorter than the original content.",
+		"- **IMPORTANT**: After your notes, append ONE brief line prefixed with 'Also contains:' listing significant sections you did NOT capture. State \"all content are summarised\" if nothing was omitted.",
+		"",
+		"Return exactly " + DISTILLER_SENTINEL + " if full content are very much relevant for further actions and should pass through unchanged. NO EXPLANATIONS, NO MARKDOWN fences, JUST " + DISTILLER_SENTINEL + ".",
 	].join("\n");
 	const prompt = [
 		"<original_system_prompt>",
@@ -186,7 +211,7 @@ async function distillWithSameModel(
 				},
 			],
 		},
-		{ apiKey: auth.apiKey, headers: auth.headers, maxTokens: MIN_LENGTH_FOR_IMPRESSION / 2 },
+		{ apiKey: auth.apiKey, headers: auth.headers, maxTokens },
 	);
 
 	const text = response.content
@@ -254,10 +279,10 @@ function notifyImpressionSkip(
 
 export default function (pi: ExtensionAPI) {
 	const impressions = new Map<string, ImpressionEntry>();
-	let config: ImpressionConfig = loadConfig();
+	let cfg: ResolvedConfig = resolveConfig(loadConfig());
 
 	pi.on("session_start", async (_event, ctx) => {
-		config = loadConfig();
+		cfg = resolveConfig(loadConfig());
 		impressions.clear();
 		for (const entry of ctx.sessionManager.getEntries()) {
 			const data = getEntryData(entry);
@@ -268,7 +293,7 @@ export default function (pi: ExtensionAPI) {
 
 	pi.on("tool_result", async (event, ctx) => {
 		if (event.toolName === "recall_impression") return;
-		if (shouldSkipDistillation(event.toolName, config)) {
+		if (shouldSkipDistillation(event.toolName, cfg)) {
 			ctx.ui.notify(`[impression] Skipped distillation for "${event.toolName}" (configured in ${CONFIG_FILE_NAME})`, "info");
 			return;
 		}
@@ -278,8 +303,8 @@ export default function (pi: ExtensionAPI) {
 		}
 
 		const fullText = serializeContent(event.content);
-		if (fullText.length < MIN_LENGTH_FOR_IMPRESSION) {
-			ctx.ui.notify(`[impression] Skipped: content length ${fullText.length} is below threshold of ${MIN_LENGTH_FOR_IMPRESSION}`, "info");
+		if (fullText.length < cfg.minLength) {
+			ctx.ui.notify(`[impression] Skipped: content length ${fullText.length} is below threshold of ${cfg.minLength}`, "info");
 			return;
 		}
 
@@ -309,6 +334,7 @@ export default function (pi: ExtensionAPI) {
 				event.content,
 				visibleHistory,
 				originalSystemPrompt,
+				Math.max(Math.ceil(cfg.minLength / 2), 1024),
 			);
 		} finally {
 			ctx.ui.setStatus("impression-distill", undefined);
@@ -343,7 +369,7 @@ export default function (pi: ExtensionAPI) {
 		name: "recall_impression",
 		label: "Recall Impression",
 		description:
-			"Recall a stored impression by ID. Before " + MAX_RECALL_BEFORE_PASSTHROUGH + " recalls it returns distilled notes; after that it returns full passthrough content.",
+			"Recall a stored impression by ID. Before " + cfg.maxRecall + " recalls it returns distilled notes; after that it returns full passthrough content.",
 		parameters: RecallImpressionParams,
 		async execute(_toolCallId, args, _signal, _onUpdate, ctx) {
 			const impression = impressions.get(args.id);
@@ -351,7 +377,7 @@ export default function (pi: ExtensionAPI) {
 				throw new Error(`Impression not found: ${args.id}`);
 			}
 
-			if (impression.recallCount >= MAX_RECALL_BEFORE_PASSTHROUGH) {
+			if (impression.recallCount >= cfg.maxRecall) {
 				return createPassthroughToolResult(impression.fullContent);
 			}
 
@@ -362,7 +388,7 @@ export default function (pi: ExtensionAPI) {
 					ctx,
 					`model changed or unavailable (stored ${impression.modelProvider}/${impression.modelId})`,
 				);
-				impression.recallCount = MAX_RECALL_BEFORE_PASSTHROUGH;
+				impression.recallCount = cfg.maxRecall;
 				pi.appendEntry(IMPRESSION_ENTRY_TYPE, impression);
 				return createPassthroughToolResult(impression.fullContent);
 			}
@@ -370,7 +396,7 @@ export default function (pi: ExtensionAPI) {
 			const auth = await ctx.modelRegistry.getApiKeyAndHeaders(model);
 			if (!auth.ok) {
 				notifyImpressionSkip(ctx, `missing auth for ${model.provider}/${model.id}: ${auth.error}`);
-				impression.recallCount = MAX_RECALL_BEFORE_PASSTHROUGH;
+				impression.recallCount = cfg.maxRecall;
 				pi.appendEntry(IMPRESSION_ENTRY_TYPE, impression);
 				return createPassthroughToolResult(impression.fullContent);
 			}
@@ -386,19 +412,20 @@ export default function (pi: ExtensionAPI) {
 					impression.fullContent,
 					visibleHistory,
 					originalSystemPrompt,
+					Math.max(Math.ceil(cfg.minLength / 2), 1024),
 				);
 			} finally {
 				ctx.ui.setStatus("impression-distill", undefined);
 			}
 
 			if (distillation.passthrough) {
-				impression.recallCount = MAX_RECALL_BEFORE_PASSTHROUGH;
+				impression.recallCount = cfg.maxRecall;
 				pi.appendEntry(IMPRESSION_ENTRY_TYPE, impression);
 				return createPassthroughToolResult(impression.fullContent);
 			}
 
 			impression.recallCount += 1;
-			if (impression.recallCount >= MAX_RECALL_BEFORE_PASSTHROUGH) {
+			if (impression.recallCount >= cfg.maxRecall) {
 				pi.appendEntry(IMPRESSION_ENTRY_TYPE, impression);
 				return createPassthroughToolResult(impression.fullContent);
 			}
