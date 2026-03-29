@@ -356,6 +356,7 @@ export default function (pi: ExtensionAPI) {
 				visibleHistory,
 				originalSystemPrompt,
 				Math.max(Math.ceil(cfg.minLength / 2), 1024),
+				ctx.signal,
 			);
 		} finally {
 			ctx.ui.setStatus("impression-distill", undefined);
