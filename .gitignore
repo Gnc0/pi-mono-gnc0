@@ -35,3 +35,6 @@ out.html
 packages/coding-agent/binaries/
 todo.md
 plans/
+
+# Standalone packages (have their own git repos)
+impression/
