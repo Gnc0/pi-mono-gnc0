@@ -69,9 +69,9 @@ async function handleConsult(
 	});
 
 	if (model) {
-		session.agent.setSystemPrompt(resolvePrompt(oracle, model));
+		session.agent.state.systemPrompt = resolvePrompt(oracle, model);
 	} else {
-		session.agent.setSystemPrompt(oracle.systemPrompt);
+		session.agent.state.systemPrompt = oracle.systemPrompt;
 	}
 
 	try {

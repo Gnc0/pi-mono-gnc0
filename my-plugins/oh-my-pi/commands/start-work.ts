@@ -129,7 +129,7 @@ async function runMomusReview(
 	const prompt = ctx.model
 		? resolvePrompt(momusAgent, ctx.model)
 		: momusAgent.systemPrompt;
-	session.agent.setSystemPrompt(prompt);
+	session.agent.state.systemPrompt = prompt;
 
 	try {
 		await session.prompt(`Review this plan for executability:\n\n${plan}`, {
@@ -203,7 +203,7 @@ export function registerStartWork(
 				const prompt = ctx.model
 					? resolvePrompt(prometheusAgent, ctx.model)
 					: prometheusAgent.systemPrompt;
-				session.agent.setSystemPrompt(prompt);
+				session.agent.state.systemPrompt = prompt;
 
 				try {
 					// 2. Initial prompt

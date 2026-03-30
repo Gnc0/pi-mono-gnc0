@@ -157,7 +157,7 @@ export function registerBoulder(
 
 function handleStagnation(
   pi: ExtensionAPI,
-  ctx: { isIdle: () => boolean; hasUI: boolean; ui: { notify: (m: string, t: string) => void } },
+  ctx: { isIdle: () => boolean; hasUI: boolean; ui: { notify: (m: string, t?: "info" | "warning" | "error") => void } },
   pendingCount: number,
 ): void {
   const msg = [
@@ -205,7 +205,7 @@ function buildRestartMessage(
 
 function sendRestart(
   pi: ExtensionAPI,
-  ctx: { isIdle: () => boolean; hasUI: boolean; ui: { notify: (m: string, t: string) => void } },
+  ctx: { isIdle: () => boolean; hasUI: boolean; ui: { notify: (m: string, t?: "info" | "warning" | "error") => void } },
   message: string,
 ): void {
   try {

@@ -46,7 +46,7 @@ function estimateContentChars(content: string | readonly { type: string; text?: 
 function estimateMessageTokens(message: AgentMessage): number {
 	if (!message || typeof message !== "object" || !("role" in message)) return 0;
 	let chars = 0;
-	const msg = message as Record<string, unknown>;
+	const msg = message as unknown as Record<string, unknown>;
 	switch (message.role) {
 		case "user":
 		case "toolResult":

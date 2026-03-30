@@ -29,7 +29,7 @@ export default function (pi: ExtensionAPI) {
 
 			const extensions = discoverExtensions(cwd, getAgentDir());
 			if (extensions.length === 0) {
-				ctx.ui.notify("No repos configured. Add extension-repos.json to .pi/ or ~/.pi/", "warn");
+				ctx.ui.notify("No repos configured. Add extension-repos.json to .pi/ or ~/.pi/", "warning");
 				return;
 			}
 
@@ -53,7 +53,7 @@ export default function (pi: ExtensionAPI) {
 			}
 
 			const { applied, warnings } = applyChanges(changes, projectExtDir, globalExtDir);
-			for (const w of warnings) ctx.ui.notify(w, "warn");
+			for (const w of warnings) ctx.ui.notify(w, "warning");
 			if (applied.length > 0) {
 				ctx.ui.notify(`Applied ${applied.length} change(s). Reloading...`, "info");
 				await ctx.reload();
