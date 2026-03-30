@@ -37,4 +37,4 @@ todo.md
 plans/
 
 # Standalone packages (have their own git repos)
-impression/
+/impression/

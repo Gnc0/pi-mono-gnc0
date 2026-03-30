@@ -1,0 +1,3 @@
+[submodule "my-plugins/impression"]
+	path = my-plugins/impression
+	url = https://github.com/ssyram/impression
