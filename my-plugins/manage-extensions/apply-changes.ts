@@ -3,8 +3,8 @@
  * Refuses to remove non-symlink files.
  */
 
-import { existsSync, lstatSync, mkdirSync, symlinkSync, unlinkSync } from "fs";
-import { join, relative } from "path";
+import { existsSync, lstatSync, mkdirSync, readlinkSync, symlinkSync, unlinkSync } from "fs";
+import { join, relative, resolve } from "path";
 import type { DiscoveredExtension } from "./discover-extensions.js";
 
 export interface ChangeEntry {
@@ -16,6 +16,26 @@ export interface ChangeEntry {
 export interface ApplyResult {
 	applied: string[];
 	warnings: string[];
+}
+
+export interface PreflightIssue {
+	extensionName: string;
+	scope: "local" | "global";
+	severity: "warning" | "error";
+	message: string;
+}
+
+export function preflightChanges(
+	changes: ChangeEntry[],
+	projectExtDir: string,
+	globalExtDir: string,
+): PreflightIssue[] {
+	const issues: PreflightIssue[] = [];
+	for (const { extension, local, global } of changes) {
+		collectPreflightIssues(extension, local, projectExtDir, "local", issues);
+		collectPreflightIssues(extension, global, globalExtDir, "global", issues);
+	}
+	return issues;
 }
 
 export function applyChanges(
@@ -32,6 +52,81 @@ export function applyChanges(
 	}
 
 	return { applied, warnings };
+}
+
+function collectPreflightIssues(
+	ext: DiscoveredExtension,
+	change: { from: boolean; to: boolean },
+	dir: string,
+	scope: "local" | "global",
+	issues: PreflightIssue[],
+): void {
+	if (change.from === change.to) return;
+	const linkPath = join(dir, ext.name);
+
+	if (!change.from && change.to) {
+		if (!existsSync(linkPath)) return;
+		try {
+			const stat = lstatSync(linkPath);
+			if (!stat.isSymbolicLink()) {
+				issues.push({
+					extensionName: ext.name,
+					scope,
+					severity: "error",
+					message: `${scope}: target path already exists and is not a symlink (${linkPath})`,
+				});
+				return;
+			}
+			const currentTarget = resolve(dir, readlinkSync(linkPath));
+			if (currentTarget !== ext.absolutePath) {
+				issues.push({
+					extensionName: ext.name,
+					scope,
+					severity: "error",
+					message: `${scope}: target path already points to a different extension (${currentTarget})`,
+				});
+			}
+		} catch (error) {
+			issues.push({
+				extensionName: ext.name,
+				scope,
+				severity: "warning",
+				message: `${scope}: unable to inspect existing target (${error})`,
+			});
+		}
+		return;
+	}
+
+	if (change.from && !change.to && existsSync(linkPath)) {
+		try {
+			const stat = lstatSync(linkPath);
+			if (!stat.isSymbolicLink()) {
+				issues.push({
+					extensionName: ext.name,
+					scope,
+					severity: "error",
+					message: `${scope}: target path is not a symlink and cannot be removed safely (${linkPath})`,
+				});
+				return;
+			}
+			const currentTarget = resolve(dir, readlinkSync(linkPath));
+			if (currentTarget !== ext.absolutePath) {
+				issues.push({
+					extensionName: ext.name,
+					scope,
+					severity: "warning",
+					message: `${scope}: existing symlink points elsewhere (${currentTarget})`,
+				});
+			}
+		} catch (error) {
+			issues.push({
+				extensionName: ext.name,
+				scope,
+				severity: "warning",
+				message: `${scope}: unable to inspect existing target (${error})`,
+			});
+		}
+	}
 }
 
 function applyOne(

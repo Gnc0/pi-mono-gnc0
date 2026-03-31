@@ -1,11 +1,11 @@
 /**
  * show-sys-prompt — Display the full system prompt in the chat UI for transparency,
- * and show a real-time token breakdown of context composition in the footer status line.
+ * and show a real-time char breakdown of context composition in the footer status line.
  *
  * - Shows the complete system prompt above the first user message.
  * - If the system prompt changes mid-conversation, shows the new version
  *   above the next user message with a separator.
- * - Displays per-role token estimates in the footer: sys:XXk usr:XXk ast:XXk tool:XXk ...
+ * - Displays per-role char counts in the footer: sys:XXk usr:XXk ast:XXk tool:XXk ...
  * - Updates the breakdown before every LLM call and after each turn/compaction.
  * - Purely visual — does NOT affect model behavior or conversation context.
  */
@@ -14,7 +14,7 @@ import type { AgentMessage } from "@mariozechner/pi-agent-core";
 import { Box, Text } from "@mariozechner/pi-tui";
 
 const ENTRY_TYPE = "sys-prompt-last";
-const STATUS_KEY = "ctx-tokens";
+const STATUS_KEY = "ctx-chars";
 
 function restoreLastPrompt(entries: SessionEntry[]): string | undefined {
 	for (let i = entries.length - 1; i >= 0; i--) {
@@ -24,11 +24,6 @@ function restoreLastPrompt(entries: SessionEntry[]): string | undefined {
 		}
 	}
 	return undefined;
-}
-
-/** Estimate token count for a string using chars/4 heuristic. */
-function estimateStringTokens(text: string): number {
-	return Math.ceil(text.length / 4);
 }
 
 /** Estimate chars for user/toolResult content (string or content blocks). */
@@ -42,8 +37,8 @@ function estimateContentChars(content: string | readonly { type: string; text?: 
 	return chars;
 }
 
-/** Estimate token count for a single AgentMessage (chars/4 heuristic). */
-function estimateMessageTokens(message: AgentMessage): number {
+/** Compute char count for a single AgentMessage. */
+function estimateMessageChars(message: AgentMessage): number {
 	if (!message || typeof message !== "object" || !("role" in message)) return 0;
 	let chars = 0;
 	const msg = message as unknown as Record<string, unknown>;
@@ -76,7 +71,7 @@ function estimateMessageTokens(message: AgentMessage): number {
 			else if (typeof msg.summary === "string") chars = (msg.summary as string).length;
 			break;
 	}
-	return Math.ceil(chars / 4);
+	return chars;
 }
 
 /** Map a message role to a display category. */
@@ -101,29 +96,29 @@ function roleCategory(role: string): string {
 	}
 }
 
-/** Format token count compactly. */
-function fmtTokens(count: number): string {
+/** Format char count compactly. */
+function fmtChars(count: number): string {
 	if (count < 1000) return count.toString();
 	if (count < 10000) return `${(count / 1000).toFixed(1)}k`;
 	if (count < 1000000) return `${Math.round(count / 1000)}k`;
 	return `${(count / 1000000).toFixed(1)}M`;
 }
 
-/** Compute per-category token breakdown and format as status string. */
+/** Compute per-category char breakdown and format as status string. */
 function computeBreakdown(messages: AgentMessage[], systemPrompt: string | undefined): string {
 	const counts = new Map<string, number>();
 
-	// System prompt tokens
+	// System prompt chars
 	if (systemPrompt) {
-		counts.set("sys", estimateStringTokens(systemPrompt));
+		counts.set("sys", systemPrompt.length);
 	}
 
-	// Message tokens by role category
+	// Message chars by role category
 	for (const msg of messages) {
 		if (!msg || typeof msg !== "object" || !("role" in msg)) continue;
 		const cat = roleCategory((msg as { role: string }).role);
-		const tokens = estimateMessageTokens(msg);
-		counts.set(cat, (counts.get(cat) ?? 0) + tokens);
+		const chars = estimateMessageChars(msg);
+		counts.set(cat, (counts.get(cat) ?? 0) + chars);
 	}
 
 	// Build display string
@@ -135,20 +130,20 @@ function computeBreakdown(messages: AgentMessage[], systemPrompt: string | undef
 	for (const cat of order) {
 		const val = counts.get(cat);
 		if (val !== undefined && val > 0) {
-			parts.push(`${cat}:${fmtTokens(val)}`);
+			parts.push(`${cat}:${fmtChars(val)}`);
 			total += val;
 			seen.add(cat);
 		}
 	}
 	for (const [cat, val] of counts) {
 		if (!seen.has(cat) && val > 0) {
-			parts.push(`${cat}:${fmtTokens(val)}`);
+			parts.push(`${cat}:${fmtChars(val)}`);
 			total += val;
 		}
 	}
 
 	if (parts.length === 0) return "";
-	return `ctx ~${fmtTokens(total)} [${parts.join(" + ")}]`;
+	return `ctx ${fmtChars(total)} chars [${parts.join(" + ")}]`;
 }
 
 function updateStatus(ctx: ExtensionContext, messages: AgentMessage[]): void {
@@ -227,7 +222,7 @@ export default function (pi: ExtensionAPI) {
 		return { action: "continue" as const };
 	});
 
-	// --- Token breakdown status (new functionality) ---
+	// --- Char breakdown status (new functionality) ---
 
 	// Before each LLM call: compute breakdown, and strip display-only custom messages from LLM context
 	pi.on("context", (event, ctx) => {
@@ -242,25 +237,15 @@ export default function (pi: ExtensionAPI) {
 		}
 	});
 
-	// After each turn: update with the turn's new messages included
-	pi.on("turn_end", (event, ctx) => {
-		// Add the new message and tool results to our tracked messages
-		if (event.message) lastMessages = [...lastMessages, event.message];
-		if (event.toolResults?.length) lastMessages = [...lastMessages, ...event.toolResults];
-		updateStatus(ctx, lastMessages);
-	});
+	// After each turn: no status update here — live context updates only in the context hook
+	pi.on("turn_end", (_event, _ctx) => {});
 
-	// After compaction: context is unknown until next LLM response
+	// After compaction: context is unknown until the next context event arrives
 	pi.on("session_compact", (_event, ctx) => {
 		lastMessages = [];
-		if (ctx.hasUI) ctx.ui.setStatus(STATUS_KEY, "ctx ~? [compacted]");
+		if (ctx.hasUI) ctx.ui.setStatus(STATUS_KEY, "ctx ? chars [compacted]");
 	});
 
-	// After agent loop ends: final update
-	pi.on("agent_end", (event, ctx) => {
-		if (event.messages?.length) {
-			lastMessages = event.messages;
-			updateStatus(ctx, event.messages);
-		}
-	});
+	// After agent loop ends: no status update here — keep last context-hook value
+	pi.on("agent_end", (_event, _ctx) => {});
 }

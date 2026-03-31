@@ -21,14 +21,48 @@ export interface DiscoveredExtension {
 	absolutePath: string;
 }
 
+export interface ScanProgress {
+	phase: "loading-repos" | "scanning-repo" | "checking-entry" | "done";
+	repoName: string | null;
+	repoIndex: number;
+	repoCount: number;
+	entryName: string | null;
+	entryIndex: number;
+	entryCount: number;
+}
+
 const REPOS_FILE = "extension-repos.json";
 
-export function discoverExtensions(cwd: string, globalDir: string): DiscoveredExtension[] {
+export function discoverExtensions(
+	cwd: string,
+	globalDir: string,
+	onProgress?: (progress: ScanProgress) => void,
+): DiscoveredExtension[] {
+	onProgress?.({
+		phase: "loading-repos",
+		repoName: null,
+		repoIndex: 0,
+		repoCount: 0,
+		entryName: null,
+		entryIndex: 0,
+		entryCount: 0,
+	});
+
 	const repos = loadRepos(join(cwd, ".pi", REPOS_FILE), join(globalDir, REPOS_FILE));
 	const results: DiscoveredExtension[] = [];
 
-	for (const repo of repos) {
+	for (const [repoOffset, repo] of repos.entries()) {
+		const repoIndex = repoOffset + 1;
 		const repoPath = resolve(repo.path);
+		onProgress?.({
+			phase: "scanning-repo",
+			repoName: repo.name,
+			repoIndex,
+			repoCount: repos.length,
+			entryName: null,
+			entryIndex: 0,
+			entryCount: 0,
+		});
 		if (!existsSync(repoPath)) continue;
 
 		let entries: Dirent[];
@@ -38,7 +72,17 @@ export function discoverExtensions(cwd: string, globalDir: string): DiscoveredEx
 			continue;
 		}
 
-		for (const entry of entries) {
+		for (const [entryOffset, entry] of entries.entries()) {
+			const entryIndex = entryOffset + 1;
+			onProgress?.({
+				phase: "checking-entry",
+				repoName: repo.name,
+				repoIndex,
+				repoCount: repos.length,
+				entryName: entry.name,
+				entryIndex,
+				entryCount: entries.length,
+			});
 			if (entry.name.startsWith(".")) continue;
 			const fullPath = join(repoPath, entry.name);
 
@@ -50,7 +94,32 @@ export function discoverExtensions(cwd: string, globalDir: string): DiscoveredEx
 		}
 	}
 
+	onProgress?.({
+		phase: "done",
+		repoName: null,
+		repoIndex: repos.length,
+		repoCount: repos.length,
+		entryName: null,
+		entryIndex: 0,
+		entryCount: 0,
+	});
+
 	return results.sort((a, b) => a.repoName.localeCompare(b.repoName) || a.name.localeCompare(b.name));
+}
+
+export function findNameConflicts(extensions: DiscoveredExtension[]): Map<string, DiscoveredExtension[]> {
+	const byName = new Map<string, DiscoveredExtension[]>();
+	for (const extension of extensions) {
+		const existing = byName.get(extension.name);
+		if (existing) existing.push(extension);
+		else byName.set(extension.name, [extension]);
+	}
+
+	for (const [name, items] of byName) {
+		if (items.length < 2) byName.delete(name);
+	}
+
+	return byName;
 }
 
 function loadRepos(...paths: string[]): RepoConfig[] {

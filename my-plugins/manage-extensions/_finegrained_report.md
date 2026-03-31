@@ -1,138 +1,63 @@
-# Fine-grained Consistency Check: manage-extensions
+# manage-extensions 当前实现说明（更新后）
 
-## Phase 0: Scope
+> 说明：此前的细粒度检查报告基于旧实现。本文件反映当前已修复后的主要逻辑与一致性状态。
 
-检查范围：6 个文件，392 行代码 + 52 行文档
-- 代码：index.ts (87), extension-list.ts (124), discover-extensions.ts (81), resolve-state.ts (38), apply-changes.ts (62)
-- 文档：README.md (52)
+## 已完成的关键修复
 
-## Phase 1: Proposition Extraction
+- 增加了**重复扩展名检测**，发现重名即阻止继续应用。
+- 扫描结果增加 `error` 字段，**扫描失败会显式提示**，不再伪装成“没有 repo 配置”。
+- 首次调用命令时，若无缓存结果，会显示**扫描进度界面**，扫描完成后自动进入主列表。
+- 主界面改为**单界面 TUI**：列表区 + 底部 `Apply / Back / Cancel` 操作区。
+- 新增 **preflightChanges()**，在 apply 前预检查目标路径冲突、错误 symlink、非 symlink 文件等问题。
+- `Apply` 按钮会在存在 blocking preflight issue 时禁用。
+- 搜索逻辑已改为：**大小写无关的顺序子序列匹配**，例如 `g54` 可匹配 `gpt-5.4` 风格名称。
+- 应用成功后会 `clearCache()`，避免后续继续使用旧扫描结果。
 
-### discover-extensions.ts
+## 当前命令主流程
 
-**P1**: `loadRepos` reads `extension-repos.json` from two paths (project `.pi/`, global dir), silently skips missing files (source: discover-extensions.ts:53-55)
-**P2**: `loadRepos` catches JSON parse errors with empty catch — malformed JSON is silently ignored, no user feedback (source: discover-extensions.ts:63)
-**P3**: `loadRepos` trusts parsed JSON is `RepoConfig[]` via cast — no runtime validation of shape (source: discover-extensions.ts:56)
-**P4**: `loadRepos` deduplicates repos by resolved absolute path (source: discover-extensions.ts:58-61)
-**P5**: `discoverExtensions` silently skips repos whose `path` doesn't exist (`!existsSync`) (source: discover-extensions.ts:33)
-**P6**: `readdirSync` is called on repo paths with no try/catch — permission errors will throw uncaught (source: discover-extensions.ts:35)
-**P7**: `isExtensionDir` catches `readFileSync`/`JSON.parse` errors for package.json — silent skip (source: discover-extensions.ts:77-79)
+1. `/manage-extensions` 启动。
+2. 若当前无 UI，则直接返回。
+3. 启动后台扫描；若无缓存结果，则显示扫描进度界面。
+4. 扫描完成后：
+   - 若扫描失败，提示错误并结束。
+   - 若没有找到扩展，提示检查 repo 配置并结束。
+   - 若发现重复扩展名，逐条提示并结束。
+5. 根据 symlink 解析每个扩展当前的 local/global 启用状态。
+6. 打开主 TUI：
+   - 列表区支持搜索、上下移动、左右切换 local/global、空格/回车切换勾选。
+   - Tab 切到底部按钮区；按钮区支持 `Apply / Back / Cancel`。
+7. 每轮进入列表前，都会基于当前 pending 变更计算 preflight issues，并在界面中展示。
+8. 若点 `Apply`：
+   - 生成变更集。
+   - 若无变更，提示 `No changes`。
+   - 执行 symlink 创建/删除。
+   - 输出 warnings。
+   - 若有成功应用项，则 reload。
+9. 若点 `Cancel`，提示 `Cancelled`。
 
-### resolve-state.ts
+## 当前搜索规则
 
-**P8**: `isSymlinkedIn` catches all errors in try/catch, returns false — symlink read failures are silent (source: resolve-state.ts:34-36)
-**P9**: `isSymlinkedIn` compares resolved symlink target with `ext.absolutePath` using strict equality (source: resolve-state.ts:35)
-**P10**: `resolveStates` does not catch errors from `existsSync`/`lstatSync` outside the try block — `existsSync` at line 31 could theoretically throw on permission issues (source: resolve-state.ts:31)
+- 搜索文本：`repoName/extensionName`
+- 匹配方式：
+  - 先把 query 和候选文本都转成小写
+  - 再做**顺序字符匹配**（subsequence match）
+- 例如：
+  - `omp` 可匹配 `oh-my-pi`
+  - `mext` 可匹配 `manage-extensions`
+  - `g54` 可匹配 `gpt-5.4-*`
 
-### apply-changes.ts
+## 当前扫描进度界面
 
-**P11**: `applyOne` removing a symlink: checks `existsSync` then `lstatSync` then `unlinkSync` — TOCTOU race between existsSync and unlinkSync (source: apply-changes.ts:49-55)
-**P12**: `applyOne` refuses to remove non-symlinks by checking `isSymbolicLink()`, adds warning string (source: apply-changes.ts:51-53)
-**P13**: `symlinkSync` creating a new link has no try/catch — if link already exists (race) or permission error, throws uncaught (source: apply-changes.ts:57-58)
-**P14**: `mkdirSync` with `{ recursive: true }` before symlink creation — safe for missing dirs (source: apply-changes.ts:57)
-**P15**: `relative(dir, ext.absolutePath)` is used for symlink target — correct only if both are absolute paths (source: apply-changes.ts:58)
+显示内容包括：
+- 当前 repo 名
+- repo 进度：`当前 repo / 总 repo`
+- 当前 entry 名
+- entry 进度：`当前 entry / 当前 repo 总 entry`
 
-### extension-list.ts
+按 `Esc` 可关闭进度查看界面，但后台扫描会继续。
 
-**P16**: `getState` returns pending state or falls back to original state — no error path (source: extension-list.ts:12-15)
-**P17**: `toggleField` uses `ext.extension.absolutePath` as pending map key — assumes absolutePath is unique across all extensions (source: extension-list.ts:21)
-**P18**: `applyFilter` sets `selectedIndex` to `max(0, filtered.length - 1)` — if filtered is empty, selectedIndex = 0 but `filtered[0]` is undefined (source: extension-list.ts:49-50)
-**P19**: `render` accesses `filtered[selectedIndex]` for description without null check after the loop — could be undefined if filtered is empty (but guarded by `if (cur)` check) (source: extension-list.ts:93-95)
-**P20**: Arrow key detection uses raw escape sequences `\x1b[D` / `\x1b[C` — not using keybindings system (source: extension-list.ts:112)
-**P21**: Space is stripped from search input (`data.replace(/ /g, "")`) to prevent conflict with Space-as-toggle — searching for space-containing terms is impossible (source: extension-list.ts:117)
+## 当前剩余注意点
 
-### index.ts
-
-**P22**: `discoverExtensions` returning empty array triggers notify + return — user sees warning about repos config (source: index.ts:32-34)
-**P23**: `buildChanges` uses `states.find()` with absolutePath — O(n) lookup for each pending entry, no Map (source: index.ts:70)
-**P24**: `applyChanges` errors (thrown by `symlinkSync`, `unlinkSync`) are not caught in the handler — will propagate as unhandled (source: index.ts:56)
-**P25**: `ctx.reload()` is called after applying changes — if reload fails, no error handling (source: index.ts:60)
-
-### README.md
-
-**P26**: README says config is in `.pi/` or `~/.pi/` — code reads from `join(cwd, ".pi", REPOS_FILE)` and `join(globalDir, REPOS_FILE)` where globalDir is `getAgentDir()` = `~/.pi/agent/` not `~/.pi/` (source: README.md:25, discover-extensions.ts:28)
-**P27**: README shows relative symlinks are created — code uses `relative(dir, ext.absolutePath)` which is correct (source: README.md:42, apply-changes.ts:58)
-
-## Phase 2: Cross-check (Contradictions & Omissions)
-
-### 矛盾 1: P26 vs 代码实际路径 — **高** — ✅ 已修复
-README 声明全局配置在 `~/.pi/extension-repos.json`，但代码传入 `getAgentDir()` 即 `~/.pi/agent/`，实际读取的是 `~/.pi/agent/extension-repos.json`。用户按文档操作会找不到配置。
-
-**修复**: README 已更正为 `~/.pi/agent/`。
-
-### 遗漏 1: P6 — readdirSync 无错误处理 — **高** — ✅ 已修复
-`readdirSync(repoPath, ...)` 在 discover-extensions.ts:35 没有 try/catch。如果 repo path 存在但无读取权限（`existsSync` 通过但 `readdirSync` 抛出 EACCES），整个 `/manage-extensions` 命令崩溃，未捕获异常。
-
-**修复**: `readdirSync` 已包裹 try/catch，权限错误时 `continue` 跳过该 repo。
-
-### 遗漏 2: P13 — symlinkSync 无错误处理 — **高** — ✅ 已修复
-`symlinkSync` 在 apply-changes.ts:58 没有 try/catch。如果目标已存在（竞态条件或手动创建），或权限不足，直接抛出 EEXIST/EACCES。此时用户已确认变更，部分变更已应用，部分未应用 — 状态不一致。
-
-**修复**: `symlinkSync` 和 `unlinkSync` 均已包裹 try/catch，失败降级为 warning 字符串。
-
-### 遗漏 3: P3 — loadRepos 无运行时类型验证 — **中** — ✅ 已修复
-JSON 被直接 cast 为 `RepoConfig[]`。如果用户写了 `{ "repos": [...] }` 或数组元素缺少 `name`/`path` 字段，后续代码在 `entry.name` / `entry.path` 上 crash 或产生 undefined behavior。
-
-**修复**: 添加 `Array.isArray(raw)` + `typeof entry?.name/path === "string"` 校验，非法条目静默跳过。
-
-### 遗漏 4: P24 — applyChanges 异常未被 handler 捕获 — **高** — ✅ 已修复
-index.ts handler 中 `applyChanges()` 调用没有 try/catch。如果任一 symlink 操作抛出（P13），整个 handler 异常退出。已经成功的 symlink 变更不会回滚，但 `ctx.reload()` 不会执行 — 活跃 extensions 与磁盘状态不一致。
-
-**修复**: `applyChanges` 内部所有 fs 操作已包裹 try/catch，不再向外抛出异常。失败通过 warnings 数组报告。
-
-### 遗漏 5: P20 — 左右箭头键使用硬编码转义序列 — **低**
-`\x1b[D` / `\x1b[C` 是 ANSI 标准，但未经过 keybindings 系统。如果用户自定义了方向键绑定（不太可能但可能），此处不会响应。与 up/down 使用 `kb.matches()` 的做法不一致。
-
-### 遗漏 6: P11 — TOCTOU 竞态 — **低**
-`existsSync` → `lstatSync` → `unlinkSync` 之间理论上有竞态窗口。实际场景中不太可能发生（单用户交互式操作），但不完美。
-
-### 遗漏 7: P15 — relative() 依赖两个绝对路径 — **低**
-`relative(dir, ext.absolutePath)` 在 `dir` 是相对路径时产生错误的 symlink 目标。`dir` 来自 `join(cwd, ".pi", "extensions")` 和 `join(getAgentDir(), "extensions")` — 通常是绝对的（cwd 和 getAgentDir 返回绝对路径），但 cwd 来自 `ctx.cwd` 理论上可能是相对路径。
-
-## Phase 3: Design Point Coverage Matrix
-
-Core design points:
-- **D1**: Config loading (extension-repos.json)
-- **D2**: Extension discovery (scan repo dirs)
-- **D3**: State resolution (symlink detection)
-- **D4**: TUI interaction (list, search, toggle)
-- **D5**: Change application (symlink create/remove)
-- **D6**: Error handling/recovery
-- **D7**: Reload lifecycle
-- **D8**: Documentation accuracy
-
-| A | B | 覆盖? | 备注 |
-|---|---|--------|------|
-| D1 | D6 | ✓ | JSON 解析错误静默忽略（合理）+ 类型验证已添加 |
-| D2 | D6 | ✓ | readdirSync 已包裹 try/catch |
-| D3 | D6 | ✓ | isSymlinkedIn 有 try/catch |
-| D4 | D6 | ✓ | 空列表有防御性渲染 |
-| D5 | D6 | ✓ | symlinkSync/unlinkSync 均已 try/catch，失败降级为 warning |
-| D5 | D7 | ✓ | 失败项报 warning，成功项正常 reload |
-| D1 | D8 | ✓ | README 已更正为 ~/.pi/agent/ |
-| D4 | D3 | ✓ | checkbox 状态与磁盘 symlink 状态一致 |
-| D2 | D3 | ✓ | discoveredExtension.absolutePath 一致使用 |
-| D4 | D5 | ✓ | pending map 正确传递到 buildChanges |
-| D7 | D6 | ✓ | reload 失败由 pi 框架处理，非扩展责任 |
-
-## Phase 4: Summary
-
-### 已修复问题
-
-1. ✅ **README 路径错误**: `~/.pi/` → `~/.pi/agent/`
-2. ✅ **readdirSync 未捕获**: 加 try/catch，权限错误时跳过
-3. ✅ **symlinkSync/unlinkSync 未捕获**: 全部 try/catch，失败降级为 warning
-4. ✅ **handler 无外层错误处理**: applyChanges 内部不再抛出
-5. ✅ **无 JSON schema 验证**: 加 Array.isArray + typeof 校验
-
-### 残留低风险项（可接受）
-
-6. 左右箭头键硬编码而非通过 keybindings 系统
-7. TOCTOU 竞态（实际场景不太可能）
-
-### 数据摘要
-- 总命题数: 27
-- 矛盾数: 1（已修复）
-- 遗漏数: 7（5 已修复，2 低风险保留）
-- 矩阵空洞: 5（全部已修复）
-- 高严重度问题: 4（全部已修复）
+- `index.ts` 仍承担较多实现逻辑；若项目有“index.ts 只做 re-export”的规则，这里仍可继续拆分。
+- 左右键 / Tab / Shift-Tab 仍依赖终端输入序列判断，只是现在已集中到 `createKeyMap()` 中统一管理。
+- 目前没有自动清理“repo 配置删除后遗留的旧 symlink”这一类历史残留。
