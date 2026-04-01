@@ -136,7 +136,7 @@ Sisyphus 的 system prompt 定义了 4 阶段协议 (详见 `agents/sisyphus.ts`
 |------|------|------|
 | `delegate_task` | 分类路由委派任务, 默认后台 | `tools/delegate-task.ts` |
 | `call_agent` | 按名直接调用 agent, 默认后台 | `tools/call-agent.ts` |
-| `task` | 任务列表管理 (add/done/expire/list/clear), Boulder 据此判断是否续行 | `tools/task.ts` |
+| `task` | 任务列表管理 (`add`/`start`/`done`/`expire`/`list`/`clear`/`update_deps`)；其中 `expire` 必须带 `reason`，expired 展示为 `TASK-CONTENT [REASON]` | `tools/task.ts` |
 | `background_task` | 查看/取消后台任务 (list/status/cancel) | `tools/background-task.ts` |
 | `background_output` | 读取后台任务输出 (summary/full/latest, 可 block 等待) | `tools/background-output.ts` |
 | `ast_grep` | AST 感知代码搜索 (需安装 `@ast-grep/cli`, 可选) | `index.ts` |

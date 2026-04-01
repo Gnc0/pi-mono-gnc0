@@ -41,3 +41,4 @@ plans/
 
 /.tmp/
 /.playwright-mcp/
+.pi/transcripts/

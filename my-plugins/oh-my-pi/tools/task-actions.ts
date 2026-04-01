@@ -53,17 +53,26 @@ export function executeStart(id: number | undefined, tasks: Task[], nextId: numb
 		return err("start", `task #${id} is blocked by: ${blockers.map((b) => `#${b}`).join(", ")}`, tasks, nextId);
 	}
 	task.status = "in_progress";
+	task.expireReason = undefined;
 	task.updatedAt = Date.now();
 	return ok(`#${id}`, "start", tasks, nextId);
 }
 
 export function executeDoneOrExpire(
-	action: "done" | "expire", id: number | undefined, tasks: Task[], nextId: number,
+	action: "done" | "expire", id: number | undefined, reason: string | undefined, tasks: Task[], nextId: number,
 ) {
 	if (id === undefined) return err(action, `id is required for ${action}`, tasks, nextId);
 	const task = tasks.find((t) => t.id === id);
 	if (!task) return err(action, `task #${id} not found`, tasks, nextId);
-	task.status = action === "done" ? "done" : "expired";
+	if (action === "expire") {
+		const trimmedReason = reason?.trim();
+		if (!trimmedReason) return err("expire", "reason is required for expire", tasks, nextId);
+		task.status = "expired";
+		task.expireReason = trimmedReason;
+	} else {
+		task.status = "done";
+		task.expireReason = undefined;
+	}
 	task.updatedAt = Date.now();
 	return ok(`#${id}`, action, tasks, nextId);
 }

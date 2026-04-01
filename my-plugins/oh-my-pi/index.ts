@@ -33,7 +33,7 @@ import { ConcurrencyManager, type Job } from "./tools/concurrency.js";
 import { registerDelegateTask, disposeDelegateTaskSessions } from "./tools/delegate-task.js";
 import { registerCallAgent, disposeCallAgentSessions } from "./tools/call-agent.js";
 import { registerTaskTool } from "./tools/task.js";
-import { isUnblocked, statusTag } from "./tools/task-helpers.js";
+import { isUnblocked, statusTag, formatTaskContent } from "./tools/task-helpers.js";
 import { registerBackgroundTask } from "./tools/background-task.js";
 import { registerBackgroundOutput } from "./tools/background-output.js";
 
@@ -156,7 +156,7 @@ export default async function ohMyPi(pi: ExtensionAPI) {
 			const deps = tag === "[blocked]"
 				? ` ← ${t.blockedBy.filter((bid) => { const d = tasks.find((x) => x.id === bid); return d && d.status !== "done" && d.status !== "expired"; }).map((b) => `#${b}`).join(",")}`
 				: "";
-			lines.push(`  ${icon} #${t.id} ${t.text}${deps}`);
+			lines.push(`  ${icon} #${t.id} ${formatTaskContent(t)}${deps}`);
 		}
 		if (sorted.length > 10) lines.push(`  ... ${sorted.length - 10} more`);
 		latestCtx.ui.setWidget("omp-tasks", lines);

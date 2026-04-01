@@ -4,16 +4,17 @@
 
 import { Text } from "@mariozechner/pi-tui";
 import type { Task, TaskDetails } from "./task-helpers.js";
-import { statusTag } from "./task-helpers.js";
+import { formatTaskContent, statusTag } from "./task-helpers.js";
 
 export function renderTaskCall(
-	args: { action: string; text?: string; id?: number; blocks?: number[]; blockedBy?: number[] },
+	args: { action: string; text?: string; id?: number; reason?: string; blocks?: number[]; blockedBy?: number[] },
 	theme: any,
 	_context: any,
 ) {
 	let text = theme.fg("toolTitle", theme.bold("task ")) + theme.fg("muted", args.action);
 	if (args.text) text += ` ${theme.fg("dim", `"${args.text}"`)}`;
 	if (args.id !== undefined) text += ` ${theme.fg("accent", `#${args.id}`)}`;
+	if (args.reason) text += ` ${theme.fg("dim", `[${args.reason}]`)}`;
 	if (args.blocks) text += ` ${theme.fg("dim", `blocks=[${args.blocks.join(",")}]`)}`;
 	if (args.blockedBy) text += ` ${theme.fg("dim", `blockedBy=[${args.blockedBy.join(",")}]`)}`;
 	return new Text(text, 0, 0);
@@ -54,7 +55,7 @@ function renderListResult(taskList: Task[], expanded: boolean, theme: any) {
 			: tag === "[blocked]" ? theme.fg("muted", "○")
 			: theme.fg("warning", "⚡");
 		const txt = (t.status === "pending" || t.status === "in_progress")
-			? theme.fg("text", t.text) : theme.fg("dim", t.text);
+			? theme.fg("text", formatTaskContent(t)) : theme.fg("dim", formatTaskContent(t));
 		let line = `${icon} ${theme.fg("accent", `#${t.id}`)} ${txt}`;
 		if (tag === "[blocked]") line += theme.fg("error", " [blocked]");
 		if (tag === "[in_progress]") line += theme.fg("accent", " [in_progress]");
