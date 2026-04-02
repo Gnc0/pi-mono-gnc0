@@ -103,10 +103,8 @@ export type {
 	SessionBeforeSwitchEvent,
 	SessionBeforeTreeEvent,
 	SessionCompactEvent,
-	SessionForkEvent,
 	SessionShutdownEvent,
 	SessionStartEvent,
-	SessionSwitchEvent,
 	SessionTreeEvent,
 	SlashCommandInfo,
 	SlashCommandSource,
@@ -127,6 +125,7 @@ export type {
 } from "./core/extensions/index.js";
 export {
 	createExtensionRuntime,
+	defineTool,
 	discoverAndLoadExtensions,
 	ExtensionRunner,
 	isBashToolResult,
@@ -157,10 +156,14 @@ export type { ResourceCollision, ResourceDiagnostic, ResourceLoader } from "./co
 export { DefaultResourceLoader } from "./core/resource-loader.js";
 // SDK for programmatic usage
 export {
+	type AgentSessionRuntimeBootstrap,
+	AgentSessionRuntimeHost,
 	type CreateAgentSessionOptions,
 	type CreateAgentSessionResult,
+	type CreateAgentSessionRuntimeOptions,
 	// Factory
 	createAgentSession,
+	createAgentSessionRuntime,
 	createBashTool,
 	// Tool factories (for custom cwd)
 	createCodingTools,

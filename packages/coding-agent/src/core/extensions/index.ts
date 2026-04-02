@@ -120,11 +120,9 @@ export type {
 	SessionDirectoryHandler,
 	SessionDirectoryResult,
 	SessionEvent,
-	SessionForkEvent,
 	SessionShutdownEvent,
 	// Events - Session
 	SessionStartEvent,
-	SessionSwitchEvent,
 	SessionTreeEvent,
 	SetActiveToolsHandler,
 	SetLabelHandler,
@@ -156,6 +154,7 @@ export type {
 } from "./types.js";
 // Type guards
 export {
+	defineTool,
 	isBashToolResult,
 	isEditToolResult,
 	isFindToolResult,

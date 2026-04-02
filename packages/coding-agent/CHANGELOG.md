@@ -2,9 +2,126 @@
 
 ## [Unreleased]
 
+### Breaking Changes
+
+- Removed extension post-transition events `session_switch` and `session_fork`. Extensions should now use `session_start` and inspect `event.reason`, which is now one of `"startup" | "reload" | "new" | "resume" | "fork"`. For `"new"`, `"resume"`, and `"fork"`, `session_start` also includes `previousSessionFile`. This is better because session replacement now fully reloads extensions, so one post-start hook with explicit reason matches the real lifecycle better than two extra non-cancellable post-transition events.
+- Removed session-replacement methods from `AgentSession`. Use `AgentSessionRuntimeHost` for `newSession()`, `switchSession()`, `fork()`, and `importFromJsonl()`. This is better because cross-cwd session replacement rebuilds cwd-bound runtime state and can replace the live `AgentSession` instance entirely. Keeping those operations on a stable runtime host matches the real lifecycle and avoids pretending one `AgentSession` mutates into another.
+
+#### Migration Notes
+
+For existing extensions:
+
+Before:
+
+```ts
+pi.on("session_switch", async (event, ctx) => {
+  if (event.reason === "new") {
+    resetState();
+  }
+});
+
+pi.on("session_fork", async (_event, ctx) => {
+  reconstructState(ctx);
+});
+```
+
+After:
+
+```ts
+pi.on("session_start", async (event, ctx) => {
+  if (event.reason === "new") {
+    resetState();
+  }
+
+  if (event.reason === "fork" || event.reason === "resume" || event.reason === "startup") {
+    reconstructState(ctx);
+  }
+});
+```
+
+For existing SDK integrations:
+
+Before:
+
+```ts
+await session.newSession();
+await session.switchSession("/path/to/session.jsonl");
+await session.fork("entry-id");
+await session.importFromJsonl(jsonl);
+```
+
+After:
+
+```ts
+const runtime = await createAgentSessionRuntime(bootstrap, {
+  cwd: process.cwd(),
+  sessionManager: SessionManager.create(process.cwd()),
+});
+const runtimeHost = new AgentSessionRuntimeHost(bootstrap, runtime);
+
+await runtimeHost.newSession();
+await runtimeHost.switchSession("/path/to/session.jsonl");
+await runtimeHost.fork("entry-id");
+await runtimeHost.importFromJsonl(jsonl);
+
+const session = runtimeHost.session;
+```
+
+After runtime replacement, use `runtimeHost.session` as the new live session and rebind any session-local subscriptions or extension bindings.
+
+### Added
+
+- Added public SDK runtime-host exports `createAgentSessionRuntime()` and `AgentSessionRuntimeHost` for apps that need runtime-backed session replacement and mode-style session switching
+
+- Added `defineTool()` so standalone and array-based custom tool definitions keep inferred parameter types without manual casts ([#2746](https://github.com/badlogic/pi-mono/issues/2746))
+
+- Added label timestamps to the session tree with a `Shift+T` toggle in `/tree`, smart date formatting, and timestamp preservation through branching ([#2691](https://github.com/badlogic/pi-mono/pull/2691) by [@w-winter](https://github.com/w-winter))
+
+### Fixed
+
+- Fixed startup resource loading to reuse the initial `ResourceLoader` for the first runtime, so extensions are not loaded twice before session startup and `session_start` handlers still fire for singleton-style extensions ([#2766](https://github.com/badlogic/pi-mono/issues/2766))
+- Fixed theme `export` colors to resolve theme variables the same way as `colors`, so `/export` HTML backgrounds now honor entries like `pageBg: "base"` instead of requiring inline hex values ([#2707](https://github.com/badlogic/pi-mono/issues/2707))
+
+## [0.64.0] - 2026-03-29
+
+### New Features
+
+- Extensions and SDK callers can attach a `prepareArguments` hook to any tool definition, letting them normalize or migrate raw model arguments before schema validation. The built-in `edit` tool uses this to transparently support sessions created with the old single-edit schema. See [docs/extensions.md](docs/extensions.md)
+- Extensions can customize the collapsed thinking block label via `ctx.ui.setHiddenThinkingLabel()`. See [examples/extensions/hidden-thinking-label.ts](examples/extensions/hidden-thinking-label.ts) ([#2673](https://github.com/badlogic/pi-mono/issues/2673))
+
+### Breaking Changes
+
+- `ModelRegistry` no longer has a public constructor. SDK callers and tests must use `ModelRegistry.create(authStorage, modelsJsonPath?)` for file-backed registries or `ModelRegistry.inMemory(authStorage)` for built-in-only registries. Direct `new ModelRegistry(...)` calls no longer compile.
+
+### Added
+
+- Added `ToolDefinition.prepareArguments` hook to prepare raw tool call arguments before schema validation, enabling compatibility shims for resumed sessions with outdated tool schemas
+- Built-in `edit` tool now uses `prepareArguments` to silently fold legacy top-level `oldText`/`newText` into `edits[]` when resuming old sessions
+- Added `ctx.ui.setHiddenThinkingLabel()` so extensions can customize the collapsed thinking label in interactive mode, with a no-op in RPC mode and a runnable example extension in `examples/extensions/hidden-thinking-label.ts` ([#2673](https://github.com/badlogic/pi-mono/issues/2673))
+
+### Fixed
+
+- Fixed extension-queued user messages to refresh the interactive pending-message list so messages submitted while a turn is active are no longer silently dropped ([#2674](https://github.com/badlogic/pi-mono/pull/2674) by [@mrexodia](https://github.com/mrexodia))
+- Fixed monorepo `tsconfig.json` path mappings to resolve `@mariozechner/pi-ai` subpath exports to source files in development checkouts ([#2625](https://github.com/badlogic/pi-mono/pull/2625) by [@ferologics](https://github.com/ferologics))
+- Fixed TUI cell size response handling to consume only exact `CSI 6 ; height ; width t` replies, so bare `Escape` is no longer swallowed while waiting for terminal image metadata ([#2661](https://github.com/badlogic/pi-mono/issues/2661))
+- Fixed Kitty keyboard protocol keypad functional keys to normalize to logical digits, symbols, and navigation keys, so numpad input in terminals such as iTerm2 no longer inserts Private Use Area gibberish or gets ignored ([#2650](https://github.com/badlogic/pi-mono/issues/2650))
+
+## [0.63.2] - 2026-03-29
+
+### New Features
+
+- Extension handlers can now use `ctx.signal` to forward cancellation into nested model calls, `fetch()`, and other abort-aware work. See [docs/extensions.md#ctxsignal](docs/extensions.md#ctxsignal) ([#2660](https://github.com/badlogic/pi-mono/issues/2660))
+- Built-in `edit` tool input now uses `edits[]` as the only replacement shape, reducing invalid tool calls caused by mixed single-edit and multi-edit schemas ([#2639](https://github.com/badlogic/pi-mono/issues/2639))
+- Large multi-edit results no longer trigger full-screen redraws in the interactive TUI when the final diff is rendered ([#2664](https://github.com/badlogic/pi-mono/issues/2664))
+
 ### Added
 
 - Added `ctx.signal` to `ExtensionContext` and wired it to the active agent turn so extension handlers can forward cancellation into nested model calls, `fetch()`, and other abort-aware work ([#2660](https://github.com/badlogic/pi-mono/issues/2660))
+
+### Fixed
+
+- Fixed built-in `edit` tool input to use `edits[]` as the only replacement shape, eliminating the mixed single-edit and multi-edit modes that caused repeated invalid tool calls and retries ([#2639](https://github.com/badlogic/pi-mono/issues/2639))
+- Fixed edit tool TUI rendering to defer large multi-edit diffs to the settled result, avoiding full-screen redraws when the tool completes ([#2664](https://github.com/badlogic/pi-mono/issues/2664))
 
 ## [0.63.1] - 2026-03-27
 
