@@ -62,11 +62,12 @@ export async function guardCheck(
 		return { action: "pass" };
 	}
 
-	const apiKey = await ctx.modelRegistry.getApiKey(guardModel);
-	if (!apiKey) {
+	const auth = await ctx.modelRegistry.getApiKeyAndHeaders(guardModel);
+	if (!auth.ok || !auth.apiKey) {
 		log.warn("guard: no API key for guard model — pass");
 		return { action: "pass" };
 	}
+	const apiKey = auth.apiKey;
 
 	const intentsText = formatIntents(ledger);
 	const lastAssistant = getLastAssistantText(ctx).slice(0, 2000);

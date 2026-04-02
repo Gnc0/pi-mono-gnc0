@@ -139,9 +139,8 @@ export default function historian(pi: ExtensionAPI) {
 	// Extract intents from user input
 	// -----------------------------------------------------------------------
 	pi.on("input", (event, ctx) => {
-		// Only process user input, not assistant or system messages
+		// Only process user input
 		if (!event.text.trim()) return;
-		if (event.role && event.role !== "user") return;
 
 		const state = getSessionState(ctx);
 		if (state.isIntentDegraded()) return;
@@ -154,8 +153,9 @@ export default function historian(pi: ExtensionAPI) {
 
 		// Fire-and-forget: don't block input processing
 		(async () => {
-			const apiKey = await ctx.modelRegistry.getApiKey(model);
-			if (!apiKey) return;
+			const auth = await ctx.modelRegistry.getApiKeyAndHeaders(model);
+			if (!auth.ok || !auth.apiKey) return;
+			const apiKey = auth.apiKey;
 
 			log.info("input: intent extraction starting");
 			const inputText = event.text.length > MAX_INTENT_INPUT_CHARS ? event.text.slice(0, MAX_INTENT_INPUT_CHARS) + "..." : event.text;
@@ -307,8 +307,8 @@ export default function historian(pi: ExtensionAPI) {
 			const cfg = getConfig();
 			const gModel = (cfg.guardModel ? resolveModel(cfg.guardModel, ctx) : undefined) ?? ctx.model;
 			if (gModel) {
-				const apiKey = await ctx.modelRegistry.getApiKey(gModel);
-				if (apiKey) {
+				const auth = await ctx.modelRegistry.getApiKeyAndHeaders(gModel);
+				if (auth.ok && auth.apiKey) {
 					try {
 						const guardResult = await guardCheck(event, ctx, ledger, gModel, experienceStore.getSummary());
 						log.info(`GUARD ${event.toolName} [${event.toolCallId}] | ${guardResult.action}${guardResult.reason ? ": " + guardResult.reason : ""}`);
@@ -431,11 +431,12 @@ export default function historian(pi: ExtensionAPI) {
 					log.warn("turn_end: no checkModel available");
 					return;
 				}
-				const apiKey = await ctx.modelRegistry.getApiKey(cModel);
-				if (!apiKey) {
+				const auth = await ctx.modelRegistry.getApiKeyAndHeaders(cModel);
+				if (!auth.ok || !auth.apiKey) {
 					log.warn("turn_end: no API key for checkModel");
 					return;
 				}
+				const apiKey = auth.apiKey;
 
 				const turnContent = buildTurnContent(ctx, state);
 				if (!turnContent.trim()) {

@@ -33,28 +33,28 @@ export interface StreamingDetails {
 
 // ─── Throttle helper ─────────────────────────────────────────────────────────
 
-function throttle<T extends (...args: never[]) => void>(fn: T, ms: number): T {
+function throttle(fn: () => void, ms: number): { call: () => void; cancel: () => void } {
 	let lastCall = 0;
 	let timer: ReturnType<typeof setTimeout> | undefined;
-	const throttled = (...args: Parameters<T>) => {
+	const call = () => {
 		const now = Date.now();
 		const remaining = ms - (now - lastCall);
 		if (remaining <= 0) {
 			if (timer) { clearTimeout(timer); timer = undefined; }
 			lastCall = now;
-			fn(...args);
+			fn();
 		} else if (!timer) {
 			timer = setTimeout(() => {
 				lastCall = Date.now();
 				timer = undefined;
-				fn(...args);
+				fn();
 			}, remaining);
 		}
 	};
 	const cancel = () => {
 		if (timer) { clearTimeout(timer); timer = undefined; }
 	};
-	return { call: throttled as unknown as T, cancel };
+	return { call, cancel };
 }
 
 // ─── Accumulator factory ────────────────────────────────────────────────────

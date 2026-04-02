@@ -65,8 +65,11 @@ export function registerBoulder(
   hasRunningTasks?: () => boolean,
 ): void {
   pi.on("session_compact", async () => { lastCompactionTime = Date.now(); });
-  pi.on("session_switch", async () => { resetBoulderState(); });
-  pi.on("session_fork", async () => { resetBoulderState(); });
+  pi.on("session_start", async (event) => {
+    if (event.reason === "new" || event.reason === "resume" || event.reason === "fork") {
+      resetBoulderState();
+    }
+  });
   pi.on("session_tree", async () => { resetBoulderState(); });
 
   pi.on("agent_end", async (event, ctx) => {
@@ -157,14 +160,14 @@ export function registerBoulder(
 
 function handleStagnation(
   pi: ExtensionAPI,
-  ctx: { isIdle: () => boolean; hasUI: boolean; ui: { notify: (m: string, t: string) => void } },
+  ctx: { isIdle: () => boolean; hasUI: boolean; ui: { notify: (m: string, t?: "info" | "warning" | "error") => void } },
   pendingCount: number,
 ): void {
   const msg = [
     `Agent appears stuck after ${stagnationCount} restarts with no progress (${pendingCount} tasks still pending).`,
     "Stopping auto-continuation.",
     "",
-    "Use the task tool to expire stale tasks, or output " + CONFIRM_STOP_TAG + " if blocked.",
+    "Use the task tool to expire stale tasks with a reason, or output " + CONFIRM_STOP_TAG + " if blocked.",
   ].join("\n");
 
   try {
@@ -196,7 +199,7 @@ function buildRestartMessage(
     "",
     "Please continue working on them. For each task, either:",
     "  - Complete the work and mark it done",
-    "  - Expire it if no longer relevant",
+    "  - Expire it with a reason if no longer relevant",
     "",
     `If you genuinely cannot continue right now, output ${CONFIRM_STOP_TAG} to acknowledge and stop.`,
     restartNote,
@@ -205,7 +208,7 @@ function buildRestartMessage(
 
 function sendRestart(
   pi: ExtensionAPI,
-  ctx: { isIdle: () => boolean; hasUI: boolean; ui: { notify: (m: string, t: string) => void } },
+  ctx: { isIdle: () => boolean; hasUI: boolean; ui: { notify: (m: string, t?: "info" | "warning" | "error") => void } },
   message: string,
 ): void {
   try {

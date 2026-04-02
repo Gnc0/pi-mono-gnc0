@@ -238,3 +238,8 @@ git pull --rebase && git push
 
 ### User override
 If the user instructions conflict with rules set out here, ask for confirmation that they want to override the rules. Only then execute their instructions.
+
+## Project Memory
+
+- All development work goes in `my-plugins/`. Everything outside `my-plugins/` is pi's official source code — used only for type checking, hooks/mechanism analysis, and reference. Do not modify.
+- `my-plugins/transcript/` — intercepts ALL LLM calls (including impression distillation) at the `@mariozechner/pi-ai` provider level by wrapping `getApiProviders()` objects. Saves complete inputs to `.pi/transcripts/<SESSION-ID>/<TIMESTAMP>_<SEQ>.json`.

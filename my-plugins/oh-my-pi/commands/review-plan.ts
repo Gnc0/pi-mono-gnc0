@@ -127,9 +127,9 @@ async function handleReview(
 	});
 
 	if (model) {
-		session.agent.setSystemPrompt(resolvePrompt(momus, model));
+		session.agent.state.systemPrompt = resolvePrompt(momus, model);
 	} else {
-		session.agent.setSystemPrompt(momus.systemPrompt);
+		session.agent.state.systemPrompt = momus.systemPrompt;
 	}
 
 	try {

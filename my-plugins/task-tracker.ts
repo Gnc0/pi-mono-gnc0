@@ -160,8 +160,6 @@ export default function (pi: ExtensionAPI) {
 	};
 
 	pi.on("session_start", async (_event, ctx) => reconstructState(ctx));
-	pi.on("session_switch", async (_event, ctx) => reconstructState(ctx));
-	pi.on("session_fork", async (_event, ctx) => reconstructState(ctx));
 	pi.on("session_tree", async (_event, ctx) => reconstructState(ctx));
 
 	// ── System prompt injection ───────────────────────────────────────────────
@@ -249,13 +247,13 @@ export default function (pi: ExtensionAPI) {
 		async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
 			const now = Date.now();
 
-			const ok = (text: string, action: TaskDetails["action"]): ReturnType<typeof ok> => ({
-				content: [{ type: "text", text }],
+			const ok = (text: string, action: TaskDetails["action"]) => ({
+				content: [{ type: "text" as const, text }],
 				details: { action, tasks: [...tasks], nextId } as TaskDetails,
 			});
 
 			const err = (action: TaskDetails["action"], error: string) => ({
-				content: [{ type: "text", text: `Error: ${error}` }],
+				content: [{ type: "text" as const, text: `Error: ${error}` }],
 				details: { action, tasks: [...tasks], nextId, error } as TaskDetails,
 			});
 

@@ -7,6 +7,7 @@
 export interface Task {
 	id: number;
 	text: string;
+	expireReason?: string;
 	status: "pending" | "in_progress" | "done" | "expired";
 	blocks: number[];
 	blockedBy: number[];
@@ -49,13 +50,19 @@ export function findNewlyUnblocked(completedId: number, tasks: Task[]): Task[] {
 	});
 }
 
+export function formatTaskContent(task: Task): string {
+	if (task.status !== "expired") return task.text;
+	const reason = task.expireReason?.trim() || "no reason";
+	return `${task.text} [${reason}]`;
+}
+
 /** Format task list for LLM consumption (plain text, no theme). */
 export function formatTaskList(tasks: Task[]): string {
 	if (tasks.length === 0) return "No tasks";
 	const lines: string[] = [];
 	for (const t of tasks) {
 		const tag = statusTag(t, tasks);
-		let line = `${tag} #${t.id}: ${t.text}`;
+		let line = `${tag} #${t.id}: ${formatTaskContent(t)}`;
 		if (t.blockedBy.length > 0) {
 			const active = t.blockedBy.filter((id) => {
 				const dep = tasks.find((d) => d.id === id);

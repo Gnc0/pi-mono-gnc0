@@ -99,7 +99,7 @@ export default function subAgentCalling(pi: ExtensionAPI) {
 
 			// Override system prompt if provided
 			if (params.systemPrompt) {
-				session.agent.setSystemPrompt(params.systemPrompt);
+				session.agent.state.systemPrompt = params.systemPrompt;
 			}
 
 			// Collect streamed assistant text for onUpdate progress reporting

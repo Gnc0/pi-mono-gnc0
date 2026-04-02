@@ -41,3 +41,10 @@ plans/
 .git-hooks/
 CLAUDE.md
 .claude
+
+# Standalone packages (have their own git repos)
+/impression/
+
+/.tmp/
+/.playwright-mcp/
+.pi/transcripts/

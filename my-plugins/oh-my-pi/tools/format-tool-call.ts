@@ -4,6 +4,8 @@
  * Ported from the official pi subagent extension to match its TUI rendering.
  */
 
+import type { ThemeColor } from "@mariozechner/pi-coding-agent";
+
 import * as os from "node:os";
 
 // ─── Path shortening ─────────────────────────────────────────────────────────
@@ -55,7 +57,7 @@ export function formatUsageStats(usage: UsageStats, model?: string): string {
 
 // ─── Tool call formatting ────────────────────────────────────────────────────
 
-type ThemeFg = (color: string, text: string) => string;
+type ThemeFg = (color: ThemeColor, text: string) => string;
 
 export function formatToolCall(
 	toolName: string,

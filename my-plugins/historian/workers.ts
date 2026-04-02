@@ -194,8 +194,9 @@ export async function semanticCheck(
 	const model = overrideModel ?? ctx.model;
 	if (!model) return failResult;
 
-	const apiKey = await ctx.modelRegistry.getApiKey(model);
-	if (!apiKey) return failResult;
+	const auth = await ctx.modelRegistry.getApiKeyAndHeaders(model);
+	if (!auth.ok || !auth.apiKey) return failResult;
+	const apiKey = auth.apiKey;
 
 	// Truncate input before building prompt to limit token usage
 	const truncatedEvent = { ...event, input: truncateToolInput(event.input) } as ToolCallEvent;
